@@ -1,0 +1,16 @@
+th3mouk/materialized-view
+Copyright 2026 Jérémy Marodon (th3mouk)
+
+This software was created and is maintained by Jérémy Marodon (th3mouk).
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use
+this software except in compliance with the License. A copy of the License is in
+the LICENSE file and at http://www.apache.org/licenses/LICENSE-2.0.
+
+Per the Apache License (sections 4 and 6), this attribution together with the
+copyright, trademark and attribution notices must be preserved in redistributions
+and derivative works. The License grants no rights to the names or marks
+"th3mouk" or "Jérémy Marodon" beyond reasonable use to describe the origin of the
+software. When you use or redistribute this software, please credit
+"Jérémy Marodon (th3mouk)" and name this library in your product's documentation
+or credits.

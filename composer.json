@@ -1,0 +1,74 @@
+{
+    "name": "th3mouk/materialized-view",
+    "description": "Declarative, PostgreSQL-native management of materialized views on top of Doctrine DBAL: define views as versioned SQL, synchronise, rebuild, refresh (concurrently) and read them safely.",
+    "type": "library",
+    "keywords": [
+        "postgresql",
+        "postgres",
+        "materialized-view",
+        "matview",
+        "doctrine",
+        "dbal",
+        "refresh",
+        "analytics",
+        "reporting",
+        "read-model",
+        "projection"
+    ],
+    "license": "Apache-2.0",
+    "authors": [
+        {
+            "name": "Jérémy Marodon (th3mouk)",
+            "role": "Author"
+        }
+    ],
+    "require": {
+        "php": ">=8.4",
+        "doctrine/dbal": "^4.4"
+    },
+    "require-dev": {
+        "doctrine/orm": "^3.6",
+        "phpunit/phpunit": "^13.0",
+        "phpstan/phpstan": "^2.1",
+        "friendsofphp/php-cs-fixer": "^3.64",
+        "rector/rector": "^2.0",
+        "psr/log": "^3.0"
+    },
+    "suggest": {
+        "doctrine/orm": "To map a materialized view as a read-only entity via Th3Mouk\\MaterializedView\\DoctrineOrm.",
+        "psr/log": "To receive structured logs for sync/refresh operations.",
+        "th3mouk/materialized-view-bundle": "Symfony integration: autoconfiguration, console commands and the locked deploy lane."
+    },
+    "autoload": {
+        "psr-4": {
+            "Th3Mouk\\MaterializedView\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Th3Mouk\\MaterializedView\\Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "branch-alias": {
+            "dev-main": "1.0.x-dev"
+        }
+    },
+    "config": {
+        "sort-packages": true
+    },
+    "scripts": {
+        "cs:check": "php-cs-fixer fix --dry-run --diff",
+        "cs:fix": "php-cs-fixer fix",
+        "rector": "rector process",
+        "stan": "phpstan analyse --memory-limit=1G",
+        "test:unit": "phpunit --testsuite=unit",
+        "test:pg": "phpunit --testsuite=integration",
+        "test": ["@test:unit", "@test:pg"]
+    },
+    "scripts-descriptions": {
+        "test:pg": "Integration tests; requires a PostgreSQL instance (see MATVIEW_TEST_DATABASE_URL)."
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}

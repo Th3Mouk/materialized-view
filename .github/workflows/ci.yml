@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  static:
+    name: Static analysis & code style
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          coverage: none
+      - run: composer install --no-interaction --prefer-dist
+      - run: composer cs:check
+      - run: composer stan
+
+  unit:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+      - run: composer install --no-interaction --prefer-dist
+      - run: composer test:unit
+
+  integration:
+    name: Integration (PostgreSQL ${{ matrix.postgres }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Track the PostgreSQL versions we support; add new majors here early.
+        postgres: [ '14', '15', '16', '17' ]
+    services:
+      postgres:
+        image: postgres:${{ matrix.postgres }}
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: matview_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: pdo_pgsql
+      - run: composer install --no-interaction --prefer-dist
+      - run: composer test:pg
+        env:
+          MATVIEW_TEST_DATABASE_URL: "postgresql://postgres:postgres@127.0.0.1:5432/matview_test?serverVersion=${{ matrix.postgres }}&charset=utf8"

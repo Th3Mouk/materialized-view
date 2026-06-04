@@ -1,0 +1,8 @@
+parameters:
+    level: 8
+    paths:
+        - src
+        - tests
+    treatPhpDocTypesAsCertain: false
+    # The DoctrineOrm namespace is only analysable when doctrine/orm is installed (dev).
+    # CI runs PHPStan with and without the optional ORM dependency.
