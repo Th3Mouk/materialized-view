@@ -7,14 +7,20 @@ namespace Th3Mouk\MaterializedView\Core\Lock;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\Exception;
 use Doctrine\DBAL\ParameterType;
+use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
 use Th3Mouk\MaterializedView\Core\Definition\MaterializedViewName;
 
 final readonly class ViewRefreshLock
 {
+    private LoggerInterface $logger;
+
     public function __construct(
         private Connection $connection,
         private StableLockKeyGenerator $keyGenerator,
+        ?LoggerInterface $logger = null,
     ) {
+        $this->logger = $logger ?? new NullLogger();
     }
 
     /**
@@ -29,6 +35,11 @@ final readonly class ViewRefreshLock
             [$lockKey->namespace, $lockKey->key],
             [ParameterType::INTEGER, ParameterType::INTEGER],
         );
+
+        $this->logger->debug('Acquired refresh advisory lock for materialized view "{view}".', [
+            'view' => $name->qualifiedName(),
+            'lock_key' => $lockKey->key,
+        ]);
     }
 
     /**
@@ -38,11 +49,27 @@ final readonly class ViewRefreshLock
     {
         $lockKey = $this->keyGenerator->forView($name);
 
-        return (bool) $this->connection->fetchOne(
+        $acquired = (bool) $this->connection->fetchOne(
             'SELECT pg_try_advisory_lock(?, ?)',
             [$lockKey->namespace, $lockKey->key],
             [ParameterType::INTEGER, ParameterType::INTEGER],
         );
+
+        if (!$acquired) {
+            $this->logger->warning(
+                'Could not acquire refresh advisory lock for materialized view "{view}": held by another session.',
+                ['view' => $name->qualifiedName(), 'lock_key' => $lockKey->key],
+            );
+
+            return false;
+        }
+
+        $this->logger->debug('Acquired refresh advisory lock for materialized view "{view}".', [
+            'view' => $name->qualifiedName(),
+            'lock_key' => $lockKey->key,
+        ]);
+
+        return true;
     }
 
     /**
@@ -52,10 +79,18 @@ final readonly class ViewRefreshLock
     {
         $lockKey = $this->keyGenerator->forView($name);
 
-        return (bool) $this->connection->fetchOne(
+        $released = (bool) $this->connection->fetchOne(
             'SELECT pg_advisory_unlock(?, ?)',
             [$lockKey->namespace, $lockKey->key],
             [ParameterType::INTEGER, ParameterType::INTEGER],
         );
+
+        $this->logger->debug('Released refresh advisory lock for materialized view "{view}".', [
+            'view' => $name->qualifiedName(),
+            'lock_key' => $lockKey->key,
+            'released' => $released,
+        ]);
+
+        return $released;
     }
 }

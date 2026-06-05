@@ -364,6 +364,7 @@ final class MaterializedViewSynchronizerTest extends TestCase
     {
         $executed = [];
         $logger = new CollectingLogger();
+        $executed = [];
         $connection = FakeConnectionFactory::create(
             $this,
             executed: $executed,
@@ -425,6 +426,66 @@ final class MaterializedViewSynchronizerTest extends TestCase
             MaterializedViewRegistry::fromDefinitions([$this->summaryDefinition()]),
             SyncOptions::default()->withMissingDependencyPolicy(MissingDependencyPolicy::Skip),
         );
+    }
+
+    public function testEmitsAnInfoSummaryWithOperationCountsOnCompletion(): void
+    {
+        $logger = new CollectingLogger();
+        $executed = [];
+        $connection = FakeConnectionFactory::create(
+            $this,
+            executed: $executed,
+            createFailureSqlStateByView: ['public.broken' => '42P01'],
+        );
+
+        $broken = MaterializedViewDefinition::create('public.broken')
+            ->fromSql(InlineSqlSource::fromString('SELECT 1 AS id FROM sure_schema.missing'))
+            ->withNoData();
+
+        $this->synchronizerFor($connection, $logger)->synchronize(
+            MaterializedViewRegistry::fromDefinitions([$broken, $this->summaryDefinition()]),
+            SyncOptions::default()->withMissingDependencyPolicy(MissingDependencyPolicy::Skip),
+        );
+
+        $summaries = array_values(array_filter(
+            $logger->recordsAtLevel(LogLevel::INFO),
+            static fn (array $record): bool => str_contains($record['message'], 'completed'),
+        ));
+
+        self::assertCount(1, $summaries);
+        self::assertSame(1, $summaries[0]['context']['created'] ?? null);
+        self::assertSame(1, $summaries[0]['context']['skipped'] ?? null);
+    }
+
+    public function testEmitsANoticeWhenDroppingADependentClosureAheadOfRebuild(): void
+    {
+        $base = MaterializedViewDefinition::create('public.base')
+            ->fromSql(InlineSqlSource::fromString('SELECT 1 AS id'));
+        $rollup = MaterializedViewDefinition::create('public.rollup')
+            ->fromSql(InlineSqlSource::fromString('SELECT id FROM public.base'));
+
+        $logger = new CollectingLogger();
+        $executed = [];
+        $connection = FakeConnectionFactory::create(
+            $this,
+            ['public' => [
+                FakeConnectionFactory::matviewRow('public', 'base', ManagementMarker::create('stale')->toJson()),
+                FakeConnectionFactory::matviewRow('public', 'rollup', ManagementMarker::create($this->hasher->hash($rollup))->toJson()),
+            ]],
+            executed: $executed,
+            dependencyEdges: [FakeConnectionFactory::dependencyEdge('public.rollup', 'public.base')],
+        );
+
+        $this->synchronizerFor($connection, $logger)
+            ->synchronize(MaterializedViewRegistry::fromDefinitions([$base, $rollup]));
+
+        $notices = array_values(array_filter(
+            $logger->recordsAtLevel(LogLevel::NOTICE),
+            static fn (array $record): bool => str_contains($record['message'], 'dependent-closure rebuild'),
+        ));
+
+        self::assertNotEmpty($notices);
+        self::assertContains('public.rollup', array_column(array_column($notices, 'context'), 'view'));
     }
 
     /**

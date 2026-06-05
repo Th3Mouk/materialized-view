@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Th3Mouk\MaterializedView\Core\Rebuild;
 
 use Doctrine\DBAL\Connection;
+use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
 use Th3Mouk\MaterializedView\Core\Definition\MaterializedViewDefinition;
 use Th3Mouk\MaterializedView\Core\Definition\MaterializedViewName;
 use Th3Mouk\MaterializedView\Core\Definition\RebuildStrategy;
@@ -15,11 +17,15 @@ final readonly class SideBySideRebuilder implements Rebuilder
 {
     private RebuildStatementFactory $statements;
 
+    private LoggerInterface $logger;
+
     public function __construct(
         private Connection $connection,
         private string $swapToken,
+        ?LoggerInterface $logger = null,
     ) {
         $this->statements = new RebuildStatementFactory(IdentifierQuoter::forConnection($connection));
+        $this->logger = $logger ?? new NullLogger();
     }
 
     public function strategy(): RebuildStrategy
@@ -55,19 +61,41 @@ final readonly class SideBySideRebuilder implements Rebuilder
         $this->guardLeafView($definition, $context);
 
         $view = $definition->name();
+        $qualifiedName = $view->qualifiedName();
         $naming = SwapNaming::for($view, $this->swapToken);
 
         $temporaryView = $this->temporaryViewName($view, $naming);
         $oldView = $this->oldViewName($view, $naming);
 
+        $this->logger->debug('Building side-by-side replacement for materialized view "{view}".', [
+            'view' => $qualifiedName,
+            'strategy' => RebuildStrategy::SideBySide->value,
+            'temporary_view' => $temporaryView->qualifiedName(),
+        ]);
+
         foreach ($this->buildTemporaryStatements($definition, $naming, $temporaryView) as $statement) {
+            $this->logger->debug('Executing side-by-side build statement.', [
+                'view' => $qualifiedName,
+                'sql' => $statement,
+            ]);
+
             $this->connection->executeStatement($statement);
         }
 
         $swapStatements = $this->swapStatements($definition, $context, $naming, $view, $temporaryView, $oldView);
 
-        $this->connection->transactional(function (Connection $connection) use ($swapStatements): void {
+        $this->logger->debug('Swapping side-by-side replacement into materialized view "{view}".', [
+            'view' => $qualifiedName,
+            'old_view' => $oldView->qualifiedName(),
+        ]);
+
+        $this->connection->transactional(function (Connection $connection) use ($swapStatements, $qualifiedName): void {
             foreach ($swapStatements as $statement) {
+                $this->logger->debug('Executing side-by-side swap statement.', [
+                    'view' => $qualifiedName,
+                    'sql' => $statement,
+                ]);
+
                 $connection->executeStatement($statement);
             }
         });

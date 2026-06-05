@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Th3Mouk\MaterializedView\Core\Privilege;
 
 use Doctrine\DBAL\Connection;
+use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
 use Th3Mouk\MaterializedView\Core\Definition\MaterializedViewName;
 
 final readonly class PrivilegeSnapshotter
@@ -16,9 +18,13 @@ final readonly class PrivilegeSnapshotter
           AND table_name = :name
         SQL;
 
+    private LoggerInterface $logger;
+
     public function __construct(
         private Connection $connection,
+        ?LoggerInterface $logger = null,
     ) {
+        $this->logger = $logger ?? new NullLogger();
     }
 
     public function capture(MaterializedViewName $view): PrivilegeSnapshot
@@ -40,6 +46,11 @@ final readonly class PrivilegeSnapshotter
                 isGrantable: (string) $row['is_grantable'],
             );
         }
+
+        $this->logger->debug('Snapshotted grants for materialized view "{view}".', [
+            'view' => $view->qualifiedName(),
+            'count' => \count($privileges),
+        ]);
 
         return PrivilegeSnapshot::forView($view, $privileges);
     }

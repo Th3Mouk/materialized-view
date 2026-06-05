@@ -4,15 +4,21 @@ declare(strict_types=1);
 
 namespace Th3Mouk\MaterializedView\Core\Dependency;
 
+use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
 use Th3Mouk\MaterializedView\Core\Definition\MaterializedViewName;
 use Th3Mouk\MaterializedView\Core\Exception\UnmanagedDependentFound;
 use Th3Mouk\MaterializedView\Core\Registry\MaterializedViewRegistry;
 
 final readonly class ExternalDependencyGuard
 {
+    private LoggerInterface $logger;
+
     public function __construct(
         private CatalogDependencyResolver $resolver,
+        ?LoggerInterface $logger = null,
     ) {
+        $this->logger = $logger ?? new NullLogger();
     }
 
     /**
@@ -24,6 +30,8 @@ final readonly class ExternalDependencyGuard
         DropDependentPolicy $policy = DropDependentPolicy::Refuse,
     ): void {
         if (DropDependentPolicy::Cascade === $policy) {
+            $this->noticeCascadeOverride($name, $registry, 'drop');
+
             return;
         }
 
@@ -43,6 +51,8 @@ final readonly class ExternalDependencyGuard
         DropDependentPolicy $policy = DropDependentPolicy::Refuse,
     ): void {
         if (DropDependentPolicy::Cascade === $policy) {
+            $this->noticeCascadeOverride($name, $registry, 'rebuild');
+
             return;
         }
 
@@ -88,6 +98,27 @@ final readonly class ExternalDependencyGuard
         sort($names);
 
         return $names;
+    }
+
+    private function noticeCascadeOverride(
+        MaterializedViewName $name,
+        MaterializedViewRegistry $registry,
+        string $operation,
+    ): void {
+        $unmanagedDependents = $this->unmanagedDependentsOf($name, $registry);
+
+        if ([] === $unmanagedDependents) {
+            return;
+        }
+
+        $this->logger->notice(
+            'CASCADE policy overrides unmanaged dependents while preparing to {operation} materialized view "{view}".',
+            [
+                'view' => $name->qualifiedName(),
+                'operation' => $operation,
+                'dependents' => $unmanagedDependents,
+            ],
+        );
     }
 
     /**

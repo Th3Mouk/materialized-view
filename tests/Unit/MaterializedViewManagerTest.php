@@ -6,6 +6,7 @@ namespace Th3Mouk\MaterializedView\Tests\Unit;
 
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
+use Psr\Log\LogLevel;
 use Th3Mouk\MaterializedView\Core\Definition\InlineSqlSource;
 use Th3Mouk\MaterializedView\Core\Definition\MaterializedViewDefinition;
 use Th3Mouk\MaterializedView\Core\Definition\MaterializedViewIndex;
@@ -16,6 +17,7 @@ use Th3Mouk\MaterializedView\Core\Exception\UnmanagedDependentFound;
 use Th3Mouk\MaterializedView\Core\Exception\ViewNotPopulated;
 use Th3Mouk\MaterializedView\Core\MaterializedViewManager;
 use Th3Mouk\MaterializedView\Core\Refresh\RefreshOptions;
+use Th3Mouk\MaterializedView\Tests\Unit\Support\CollectingLogger;
 use Th3Mouk\MaterializedView\Tests\Unit\Support\FakeConnectionFactory;
 
 #[Group('manager')]
@@ -263,6 +265,27 @@ final class MaterializedViewManagerTest extends TestCase
 
         self::assertSame(['public.summary'], $outcome->created);
         self::assertContains('DROP MATERIALIZED VIEW IF EXISTS "public"."summary"', $executed);
+    }
+
+    public function testRefreshEmitsAnInfoWithDurationMilliseconds(): void
+    {
+        $executed = [];
+        $logger = new CollectingLogger();
+        $manager = MaterializedViewManager::forConnection(
+            FakeConnectionFactory::create($this, [], [], $executed),
+            $logger,
+        );
+
+        $manager->refresh($this->definition());
+
+        $refreshed = array_values(array_filter(
+            $logger->recordsAtLevel(LogLevel::INFO),
+            static fn (array $record): bool => str_contains($record['message'], 'Refreshed'),
+        ));
+
+        self::assertCount(1, $refreshed);
+        self::assertSame('public.summary', $refreshed[0]['context']['view'] ?? null);
+        self::assertArrayHasKey('duration_ms', $refreshed[0]['context']);
     }
 
     private function definition(): MaterializedViewDefinition

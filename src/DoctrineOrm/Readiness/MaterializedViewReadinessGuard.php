@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Th3Mouk\MaterializedView\DoctrineOrm\Readiness;
 
 use Doctrine\ORM\EntityManagerInterface;
+use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
 use Th3Mouk\MaterializedView\Core\Definition\MaterializedViewName;
 use Th3Mouk\MaterializedView\Core\Exception\ViewNotPopulated;
 use Th3Mouk\MaterializedView\Core\Introspection\ReadinessChecker;
@@ -12,11 +14,15 @@ use Th3Mouk\MaterializedView\DoctrineOrm\Mapping\MaterializedViewMetadataReader;
 
 final readonly class MaterializedViewReadinessGuard
 {
+    private LoggerInterface $logger;
+
     public function __construct(
         private EntityManagerInterface $entityManager,
         private MaterializedViewMetadataReader $metadataReader,
         private ReadinessChecker $readinessChecker,
+        ?LoggerInterface $logger = null,
     ) {
+        $this->logger = $logger ?? new NullLogger();
     }
 
     /**
@@ -24,7 +30,14 @@ final readonly class MaterializedViewReadinessGuard
      */
     public function isReady(string $entityClass): bool
     {
-        return $this->readinessChecker->isReady($this->viewNameFor($entityClass));
+        $name = $this->viewNameFor($entityClass);
+
+        $this->logger->debug('Checking readiness of materialized view entity "{entity}".', [
+            'entity' => $entityClass,
+            'view' => $name->qualifiedName(),
+        ]);
+
+        return $this->readinessChecker->isReady($name);
     }
 
     /**
@@ -34,7 +47,14 @@ final readonly class MaterializedViewReadinessGuard
      */
     public function ensureReadable(string $entityClass): void
     {
-        $this->readinessChecker->ensureReadable($this->viewNameFor($entityClass));
+        $name = $this->viewNameFor($entityClass);
+
+        $this->logger->debug('Ensuring materialized view entity "{entity}" is readable.', [
+            'entity' => $entityClass,
+            'view' => $name->qualifiedName(),
+        ]);
+
+        $this->readinessChecker->ensureReadable($name);
     }
 
     /**

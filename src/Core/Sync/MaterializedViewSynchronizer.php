@@ -34,6 +34,8 @@ final readonly class MaterializedViewSynchronizer
 {
     private const string DEFAULT_SWAP_TOKEN_PREFIX = 'sync';
 
+    private LoggerInterface $logger;
+
     public function __construct(
         private Connection $connection,
         private MaterializedViewComparator $comparator,
@@ -44,8 +46,9 @@ final readonly class MaterializedViewSynchronizer
         private PostgreSqlMaterializedViewSqlGenerator $sqlGenerator,
         private PostgreSqlMaterializedViewIntrospector $introspector,
         private DefinitionHasher $hasher,
-        private LoggerInterface $logger = new NullLogger(),
+        ?LoggerInterface $logger = null,
     ) {
+        $this->logger = $logger ?? new NullLogger();
     }
 
     public function synchronize(MaterializedViewRegistry $registry, ?SyncOptions $options = null): SyncOutcome
@@ -56,6 +59,14 @@ final readonly class MaterializedViewSynchronizer
         $graph = $this->dependencyResolver->graphForManagedViews($registry);
 
         $buildOrder = $this->resolveBuildOrder($plan, $graph);
+
+        $this->logger->info('Materialized view synchronisation started.', [
+            'managed' => $registry->count(),
+            'to_create' => \count($plan->toCreate()),
+            'to_rebuild' => \count($plan->toRebuild()),
+            'up_to_date' => \count($plan->upToDate()),
+            'orphans' => \count($plan->orphans()),
+        ]);
 
         foreach ($buildOrder as $qualifiedName) {
             $this->externalDependencyGuard->assertSafeToRebuild(
@@ -77,6 +88,12 @@ final readonly class MaterializedViewSynchronizer
             $definition = $registry->get($qualifiedName);
 
             $isCreate = SyncAction::Create === $plan->forName($qualifiedName)?->action;
+
+            $this->logger->debug('Building materialized view "{view}".', [
+                'view' => $qualifiedName,
+                'action' => $isCreate ? 'create' : 'rebuild',
+                'strategy' => $definition->rebuildStrategy()->value,
+            ]);
 
             try {
                 $this->buildView($definition, $registry, $graph, $privilegeSnapshots[$qualifiedName], $options);
@@ -103,12 +120,12 @@ final readonly class MaterializedViewSynchronizer
             }
 
             $rebuilt[] = $qualifiedName;
-            $this->logger->info('Rebuilt materialized view "{view}".', ['view' => $qualifiedName]);
+            $this->logger->notice('Recreated existing materialized view "{view}".', ['view' => $qualifiedName]);
         }
 
         [$pruned, $orphansKept] = $this->handleOrphans($plan, $registry, $options);
 
-        return SyncOutcome::of(
+        $outcome = SyncOutcome::of(
             created: $created,
             rebuilt: $rebuilt,
             upToDate: $this->namesOf($plan->upToDate()),
@@ -116,6 +133,17 @@ final readonly class MaterializedViewSynchronizer
             orphansKept: $orphansKept,
             skipped: $skipped,
         );
+
+        $this->logger->info('Materialized view synchronisation completed.', [
+            'created' => \count($outcome->created),
+            'updated' => \count($outcome->rebuilt),
+            'up_to_date' => \count($outcome->upToDate),
+            'skipped' => \count($outcome->skipped),
+            'pruned' => \count($outcome->pruned),
+            'orphans_kept' => \count($outcome->orphansKept),
+        ]);
+
+        return $outcome;
     }
 
     private function shouldSkipMissingDependency(DbalException $exception, SyncOptions $options): bool
@@ -180,6 +208,11 @@ final readonly class MaterializedViewSynchronizer
             if (!isset($closureMembers[$qualifiedName])) {
                 continue;
             }
+
+            $this->logger->notice('Dropping materialized view "{view}" ahead of a dependent-closure rebuild.', [
+                'view' => $qualifiedName,
+                'cascade' => $cascade,
+            ]);
 
             $this->connection->executeStatement(
                 $this->sqlGenerator->drop(MaterializedViewName::fromString($qualifiedName), true, $cascade),
@@ -268,10 +301,10 @@ final readonly class MaterializedViewSynchronizer
     private function rebuilderFor(MaterializedViewDefinition $definition, SyncOptions $options): Rebuilder
     {
         if (RebuildStrategy::SideBySide === $definition->rebuildStrategy()) {
-            return new SideBySideRebuilder($this->connection, $this->swapToken($definition, $options));
+            return new SideBySideRebuilder($this->connection, $this->swapToken($definition, $options), $this->logger);
         }
 
-        return new DropCreateRebuilder($this->connection);
+        return new DropCreateRebuilder($this->connection, $this->logger);
     }
 
     private function swapToken(MaterializedViewDefinition $definition, SyncOptions $options): string

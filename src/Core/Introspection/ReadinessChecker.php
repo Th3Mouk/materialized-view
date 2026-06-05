@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Th3Mouk\MaterializedView\Core\Introspection;
 
 use Doctrine\DBAL\Connection;
+use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
 use Th3Mouk\MaterializedView\Core\Definition\MaterializedViewName;
 use Th3Mouk\MaterializedView\Core\Exception\ViewNotPopulated;
 
@@ -24,16 +26,31 @@ final class ReadinessChecker
      */
     private array $populationByName = [];
 
+    private readonly LoggerInterface $logger;
+
     public function __construct(
         private readonly Connection $connection,
+        ?LoggerInterface $logger = null,
     ) {
+        $this->logger = $logger ?? new NullLogger();
     }
 
     public function isReady(MaterializedViewName $name): bool
     {
         $key = $name->qualifiedName();
 
-        return $this->populationByName[$key] ??= $this->readPopulationState($name);
+        if (\array_key_exists($key, $this->populationByName)) {
+            $this->logger->debug('Readiness cache hit for materialized view "{view}".', [
+                'view' => $key,
+                'ready' => $this->populationByName[$key],
+            ]);
+
+            return $this->populationByName[$key];
+        }
+
+        $this->logger->debug('Readiness cache miss for materialized view "{view}".', ['view' => $key]);
+
+        return $this->populationByName[$key] = $this->readPopulationState($name);
     }
 
     /**
@@ -42,6 +59,10 @@ final class ReadinessChecker
     public function ensureReadable(MaterializedViewName $name): void
     {
         if (!$this->isReady($name)) {
+            $this->logger->warning('Materialized view "{view}" is not populated and cannot be read.', [
+                'view' => $name->qualifiedName(),
+            ]);
+
             throw ViewNotPopulated::forRead($name);
         }
     }

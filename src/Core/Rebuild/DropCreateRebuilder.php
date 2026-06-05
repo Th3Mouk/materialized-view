@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Th3Mouk\MaterializedView\Core\Rebuild;
 
 use Doctrine\DBAL\Connection;
+use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
 use Th3Mouk\MaterializedView\Core\Definition\MaterializedViewDefinition;
 use Th3Mouk\MaterializedView\Core\Definition\RebuildStrategy;
 use Th3Mouk\MaterializedView\Core\Exception\UnmanagedDependentFound;
@@ -14,10 +16,14 @@ final readonly class DropCreateRebuilder implements Rebuilder
 {
     private RebuildStatementFactory $statements;
 
+    private LoggerInterface $logger;
+
     public function __construct(
         private Connection $connection,
+        ?LoggerInterface $logger = null,
     ) {
         $this->statements = new RebuildStatementFactory(IdentifierQuoter::forConnection($connection));
+        $this->logger = $logger ?? new NullLogger();
     }
 
     public function strategy(): RebuildStrategy
@@ -58,7 +64,27 @@ final readonly class DropCreateRebuilder implements Rebuilder
 
     public function rebuild(MaterializedViewDefinition $definition, RebuildContext $context): void
     {
+        $view = $definition->name()->qualifiedName();
+
+        $this->logger->debug('Recreating materialized view "{view}" via drop/create.', [
+            'view' => $view,
+            'strategy' => RebuildStrategy::DropCreate->value,
+            'drop_cascade' => $context->dropCascade,
+        ]);
+
+        if ($context->dropCascade && $context->hasDependents()) {
+            $this->logger->notice(
+                'Dropping materialized view "{view}" with CASCADE, taking down its dependents.',
+                [
+                    'view' => $view,
+                    'dependents' => $context->dependentNames(),
+                ],
+            );
+        }
+
         foreach ($this->planFor($definition, $context)->statements() as $statement) {
+            $this->logger->debug('Executing rebuild statement.', ['view' => $view, 'sql' => $statement]);
+
             $this->connection->executeStatement($statement);
         }
     }

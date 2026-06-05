@@ -6,6 +6,7 @@ namespace Th3Mouk\MaterializedView\Tests\Unit\Rebuild;
 
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
+use Psr\Log\LogLevel;
 use Th3Mouk\MaterializedView\Core\Definition\InlineSqlSource;
 use Th3Mouk\MaterializedView\Core\Definition\MaterializedViewDefinition;
 use Th3Mouk\MaterializedView\Core\Definition\MaterializedViewIndex;
@@ -16,6 +17,7 @@ use Th3Mouk\MaterializedView\Core\Exception\UnmanagedDependentFound;
 use Th3Mouk\MaterializedView\Core\Rebuild\DependentView;
 use Th3Mouk\MaterializedView\Core\Rebuild\DropCreateRebuilder;
 use Th3Mouk\MaterializedView\Core\Rebuild\RebuildContext;
+use Th3Mouk\MaterializedView\Tests\Unit\Support\CollectingLogger;
 
 #[Group('rebuild')]
 final class DropCreateRebuilderTest extends TestCase
@@ -166,6 +168,30 @@ final class DropCreateRebuilderTest extends TestCase
         $rebuilder->rebuild($this->definition(), $context);
 
         self::assertSame($rebuilder->planFor($this->definition(), $context)->statements(), $executed);
+    }
+
+    public function testEmitsANoticeWhenDroppingDependentsWithCascade(): void
+    {
+        $executed = [];
+        $logger = new CollectingLogger();
+        $rebuilder = new DropCreateRebuilder(RebuildTestConnectionFactory::recording($this, $executed), $logger);
+
+        $rebuilder->rebuild(
+            $this->definition(),
+            RebuildContext::create(
+                managementComment: '{}',
+                dependents: [
+                    DependentView::managed(MaterializedViewName::fromString('public.summary_rollup')),
+                ],
+                dropCascade: true,
+            ),
+        );
+
+        $notices = $logger->recordsAtLevel(LogLevel::NOTICE);
+
+        self::assertCount(1, $notices);
+        self::assertStringContainsString('CASCADE', $notices[0]['message']);
+        self::assertSame(['public.summary_rollup'], $notices[0]['context']['dependents'] ?? null);
     }
 
     private function definition(): MaterializedViewDefinition

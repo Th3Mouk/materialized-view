@@ -9,11 +9,13 @@ use Doctrine\ORM\Event\OnFlushEventArgs;
 use Doctrine\ORM\UnitOfWork;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
+use Psr\Log\LogLevel;
 use Th3Mouk\MaterializedView\DoctrineOrm\Exception\CannotWriteMaterializedViewEntity;
 use Th3Mouk\MaterializedView\DoctrineOrm\Listener\MaterializedViewWriteGuard;
 use Th3Mouk\MaterializedView\DoctrineOrm\Mapping\MaterializedViewMetadataReader;
 use Th3Mouk\MaterializedView\Tests\Unit\DoctrineOrm\Fixtures\PlainEntity;
 use Th3Mouk\MaterializedView\Tests\Unit\DoctrineOrm\Fixtures\SalesByCategory;
+use Th3Mouk\MaterializedView\Tests\Unit\Support\CollectingLogger;
 
 #[Group('doctrine-orm')]
 final class MaterializedViewWriteGuardTest extends TestCase
@@ -82,6 +84,24 @@ final class MaterializedViewWriteGuardTest extends TestCase
         $this->guard->onFlush($this->onFlushWith());
 
         $this->expectNotToPerformAssertions();
+    }
+
+    public function testEmitsAWarningWhenBlockingAWriteToAMaterializedViewEntity(): void
+    {
+        $logger = new CollectingLogger();
+        $guard = new MaterializedViewWriteGuard(new MaterializedViewMetadataReader(), $logger);
+
+        try {
+            $guard->onFlush($this->onFlushWith(insertions: [new SalesByCategory()]));
+        } catch (CannotWriteMaterializedViewEntity) {
+        }
+
+        $warnings = $logger->recordsAtLevel(LogLevel::WARNING);
+
+        self::assertCount(1, $warnings);
+        self::assertStringContainsString('Blocked', $warnings[0]['message']);
+        self::assertSame(SalesByCategory::class, $warnings[0]['context']['entity'] ?? null);
+        self::assertSame('insert', $warnings[0]['context']['operation'] ?? null);
     }
 
     /**

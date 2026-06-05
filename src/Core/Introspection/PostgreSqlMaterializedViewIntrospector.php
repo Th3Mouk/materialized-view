@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Th3Mouk\MaterializedView\Core\Introspection;
 
 use Doctrine\DBAL\Connection;
+use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
 use Th3Mouk\MaterializedView\Core\Definition\MaterializedViewName;
 
 final readonly class PostgreSqlMaterializedViewIntrospector
@@ -45,9 +47,13 @@ final readonly class PostgreSqlMaterializedViewIntrospector
         ORDER BY indexname
         SQL;
 
+    private LoggerInterface $logger;
+
     public function __construct(
         private Connection $connection,
+        ?LoggerInterface $logger = null,
     ) {
+        $this->logger = $logger ?? new NullLogger();
     }
 
     /**
@@ -55,6 +61,8 @@ final readonly class PostgreSqlMaterializedViewIntrospector
      */
     public function introspectSchema(string $schema = MaterializedViewName::DEFAULT_SCHEMA): array
     {
+        $this->logger->debug('Probing pg_class for materialized views in schema "{schema}".', ['schema' => $schema]);
+
         $rows = $this->connection->fetchAllAssociative(
             self::MATERIALIZED_VIEWS_IN_SCHEMA_SQL,
             ['schema_name' => $schema],
@@ -71,11 +79,20 @@ final readonly class PostgreSqlMaterializedViewIntrospector
             $views[] = $this->hydrateView($name, $row);
         }
 
+        $this->logger->debug('Found {count} materialized view(s) in schema "{schema}".', [
+            'schema' => $schema,
+            'count' => \count($views),
+        ]);
+
         return $views;
     }
 
     public function find(MaterializedViewName $name): ?IntrospectedMaterializedView
     {
+        $this->logger->debug('Probing pg_class for materialized view "{view}".', [
+            'view' => $name->qualifiedName(),
+        ]);
+
         $row = $this->connection->fetchAssociative(
             self::SINGLE_MATERIALIZED_VIEW_SQL,
             [
@@ -101,6 +118,10 @@ final readonly class PostgreSqlMaterializedViewIntrospector
      */
     public function introspectIndexes(MaterializedViewName $name): array
     {
+        $this->logger->debug('Probing pg_indexes for materialized view "{view}".', [
+            'view' => $name->qualifiedName(),
+        ]);
+
         $rows = $this->connection->fetchAllAssociative(
             self::INDEXES_SQL,
             [

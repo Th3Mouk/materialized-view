@@ -64,7 +64,7 @@ final readonly class MaterializedViewManager
         $introspector = new PostgreSqlMaterializedViewIntrospector($connection);
         $hasher = DefinitionHasher::create();
         $dependencyResolver = new CatalogDependencyResolver($connection);
-        $externalDependencyGuard = new ExternalDependencyGuard($dependencyResolver);
+        $externalDependencyGuard = new ExternalDependencyGuard($dependencyResolver, $logger);
         $grantStatementGenerator = new GrantStatementGenerator($quoter);
 
         $synchronizer = new MaterializedViewSynchronizer(
@@ -72,7 +72,7 @@ final readonly class MaterializedViewManager
             comparator: new MaterializedViewComparator($introspector, $hasher),
             dependencyResolver: $dependencyResolver,
             externalDependencyGuard: $externalDependencyGuard,
-            privilegeSnapshotter: new PrivilegeSnapshotter($connection),
+            privilegeSnapshotter: new PrivilegeSnapshotter($connection, $logger),
             grantStatementGenerator: $grantStatementGenerator,
             sqlGenerator: $sqlGenerator,
             introspector: $introspector,
@@ -86,8 +86,8 @@ final readonly class MaterializedViewManager
             externalDependencyGuard: $externalDependencyGuard,
             sqlGenerator: $sqlGenerator,
             introspector: $introspector,
-            readinessChecker: new ReadinessChecker($connection),
-            refreshLock: new ViewRefreshLock($connection, new StableLockKeyGenerator($refreshLockNamespace)),
+            readinessChecker: new ReadinessChecker($connection, $logger),
+            refreshLock: new ViewRefreshLock($connection, new StableLockKeyGenerator($refreshLockNamespace), $logger),
             hasher: $hasher,
             synchronizer: $synchronizer,
             logger: $logger,
@@ -103,11 +103,16 @@ final readonly class MaterializedViewManager
             MaterializedViewRegistry::fromDefinitions([$definition]),
         );
 
+        $this->logger->debug('Creating materialized view "{view}".', [
+            'view' => $definition->name()->qualifiedName(),
+            'strategy' => $definition->rebuildStrategy()->value,
+        ]);
+
         $context = RebuildContext::create(
             managementComment: $this->managementComment($definition),
         );
 
-        new DropCreateRebuilder($this->connection)->rebuild($definition, $context);
+        new DropCreateRebuilder($this->connection, $this->logger)->rebuild($definition, $context);
 
         $this->readinessChecker->forget($definition->name());
 
@@ -130,6 +135,12 @@ final readonly class MaterializedViewManager
         );
 
         $cascade = DropDependentPolicy::Cascade === $dropDependentPolicy;
+
+        $this->logger->debug('Dropping materialized view "{view}".', [
+            'view' => $name->qualifiedName(),
+            'cascade' => $cascade,
+        ]);
+
         $this->connection->executeStatement($this->sqlGenerator->drop($name, $ifExists, $cascade));
 
         $this->readinessChecker->forget($name);
@@ -151,6 +162,12 @@ final readonly class MaterializedViewManager
             if ($options->concurrently) {
                 $this->assertConcurrentlySupported($definition);
             }
+
+            $this->logger->debug('Refreshing materialized view "{view}".', [
+                'view' => $name->qualifiedName(),
+                'concurrently' => $options->concurrently,
+                'with_data' => $options->withData,
+            ]);
 
             $startedAtNanoseconds = hrtime(true);
             $this->connection->executeStatement($this->sqlGenerator->refresh($name, $options));
