@@ -74,7 +74,7 @@ A full table of contents is in [`docs/README.md`](docs/README.md).
 
 | This library | PHP | Doctrine DBAL | Doctrine ORM (optional) | PostgreSQL |
 |---|---|---|---|---|
-| `^0.1` | ≥ 8.4 | ^4.4 | ^3.6 | 12 – 17 |
+| `^1.0` | ≥ 8.4 | ^4.4 | ^3.6 | 12 – 17 |
 
 We track DBAL major versions deliberately and **do not pin a tight upper bound that would strand the library** (see [`docs/internals/compatibility-and-evolution.md`](docs/internals/compatibility-and-evolution.md)).
 
