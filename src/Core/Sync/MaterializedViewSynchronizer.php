@@ -84,7 +84,9 @@ final readonly class MaterializedViewSynchronizer
         $rebuilt = [];
         $skipped = [];
 
-        foreach ($buildOrder as $qualifiedName) {
+        $total = \count($buildOrder);
+
+        foreach ($buildOrder as $position => $qualifiedName) {
             $definition = $registry->get($qualifiedName);
 
             $isCreate = SyncAction::Create === $plan->forName($qualifiedName)?->action;
@@ -100,6 +102,20 @@ final readonly class MaterializedViewSynchronizer
                 $this->applyPopulationAndAnalyze($definition, $options);
             } catch (DbalException $exception) {
                 if (!$this->shouldSkipMissingDependency($exception, $options)) {
+                    $this->logger->error(
+                        'Materialized view synchronisation aborted while building "{view}".',
+                        [
+                            'view' => $qualifiedName,
+                            'action' => $isCreate ? 'create' : 'rebuild',
+                            'sqlstate_reason' => $exception->getMessage(),
+                            'created' => \count($created),
+                            'rebuilt' => \count($rebuilt),
+                            'skipped' => \count($skipped),
+                            'remaining' => $total - $position - 1,
+                            'managed' => $registry->count(),
+                        ],
+                    );
+
                     throw $exception;
                 }
 

@@ -33,6 +33,7 @@ use Th3Mouk\MaterializedView\Core\Sync\MaterializedViewComparator;
 use Th3Mouk\MaterializedView\Core\Sync\MaterializedViewSynchronizer;
 use Th3Mouk\MaterializedView\Core\Sync\SyncOptions;
 use Th3Mouk\MaterializedView\Core\Sync\SyncOutcome;
+use Throwable;
 
 final readonly class MaterializedViewManager
 {
@@ -210,10 +211,36 @@ final readonly class MaterializedViewManager
         $this->primaryConnectionGuard->ensureConnectedToPrimary();
 
         $resolver = new CatalogDependencyResolver($this->connection);
+        $order = $resolver->orderedForRefresh($registry);
+        $total = \count($order);
 
-        foreach ($resolver->orderedForRefresh($registry) as $qualifiedName) {
-            $this->refresh($registry->get($qualifiedName), $options);
+        $this->logger->info('Materialized view refresh-all started.', ['total' => $total]);
+
+        $refreshed = 0;
+        foreach ($order as $qualifiedName) {
+            try {
+                $this->refresh($registry->get($qualifiedName), $options);
+            } catch (Throwable $exception) {
+                $this->logger->error(
+                    'Materialized view refresh-all aborted at "{view}".',
+                    [
+                        'view' => $qualifiedName,
+                        'refreshed' => $refreshed,
+                        'remaining' => $total - $refreshed - 1,
+                        'total' => $total,
+                    ],
+                );
+
+                throw $exception;
+            }
+
+            ++$refreshed;
         }
+
+        $this->logger->info('Materialized view refresh-all completed.', [
+            'refreshed' => $refreshed,
+            'total' => $total,
+        ]);
     }
 
     private function assertConcurrentlySupported(MaterializedViewDefinition $definition): void

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Th3Mouk\MaterializedView\Tests\Unit;
 
+use Doctrine\DBAL\Exception\DriverException;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LogLevel;
@@ -17,6 +18,7 @@ use Th3Mouk\MaterializedView\Core\Exception\UnmanagedDependentFound;
 use Th3Mouk\MaterializedView\Core\Exception\ViewNotPopulated;
 use Th3Mouk\MaterializedView\Core\MaterializedViewManager;
 use Th3Mouk\MaterializedView\Core\Refresh\RefreshOptions;
+use Th3Mouk\MaterializedView\Core\Registry\MaterializedViewRegistry;
 use Th3Mouk\MaterializedView\Tests\Unit\Support\CollectingLogger;
 use Th3Mouk\MaterializedView\Tests\Unit\Support\FakeConnectionFactory;
 
@@ -288,6 +290,80 @@ final class MaterializedViewManagerTest extends TestCase
         self::assertArrayHasKey('duration_ms', $refreshed[0]['context']);
     }
 
+    public function testRefreshAllEmitsStartedAndCompletedRollups(): void
+    {
+        $executed = [];
+        $logger = new CollectingLogger();
+        $manager = MaterializedViewManager::forConnection(
+            FakeConnectionFactory::create(
+                $this,
+                executed: $executed,
+                dependencyEdges: [FakeConnectionFactory::dependencyEdge('public.rollup', 'public.base')],
+            ),
+            $logger,
+        );
+
+        $manager->refreshAll(MaterializedViewRegistry::fromDefinitions([
+            $this->baseDefinition(),
+            $this->rollupDefinition(),
+        ]));
+
+        $infos = $logger->recordsAtLevel(LogLevel::INFO);
+
+        $started = array_values(array_filter(
+            $infos,
+            static fn (array $record): bool => str_contains($record['message'], 'refresh-all started'),
+        ));
+        self::assertCount(1, $started);
+        self::assertSame(2, $started[0]['context']['total'] ?? null);
+
+        $completed = array_values(array_filter(
+            $infos,
+            static fn (array $record): bool => str_contains($record['message'], 'refresh-all completed'),
+        ));
+        self::assertCount(1, $completed);
+        self::assertSame(2, $completed[0]['context']['refreshed'] ?? null);
+        self::assertSame(2, $completed[0]['context']['total'] ?? null);
+    }
+
+    public function testRefreshAllLogsTheFailingViewAndPartialRollupBeforeRethrowing(): void
+    {
+        $executed = [];
+        $logger = new CollectingLogger();
+        $manager = MaterializedViewManager::forConnection(
+            FakeConnectionFactory::create(
+                $this,
+                executed: $executed,
+                dependencyEdges: [FakeConnectionFactory::dependencyEdge('public.rollup', 'public.base')],
+                refreshFailureSqlStateByView: ['public.rollup' => '42P01'],
+            ),
+            $logger,
+        );
+
+        try {
+            $manager->refreshAll(MaterializedViewRegistry::fromDefinitions([
+                $this->baseDefinition(),
+                $this->rollupDefinition(),
+            ]));
+            self::fail('Expected the refresh failure to propagate to the caller.');
+        } catch (DriverException) {
+            // expected: refresh-all aborts at the failing view and the error propagates.
+        }
+
+        $errors = $logger->recordsAtLevel(LogLevel::ERROR);
+        self::assertCount(1, $errors);
+        self::assertStringContainsString('aborted', $errors[0]['message']);
+        self::assertSame('public.rollup', $errors[0]['context']['view'] ?? null);
+        self::assertSame(1, $errors[0]['context']['refreshed'] ?? null);
+        self::assertSame(0, $errors[0]['context']['remaining'] ?? null);
+
+        $completed = array_values(array_filter(
+            $logger->recordsAtLevel(LogLevel::INFO),
+            static fn (array $record): bool => str_contains($record['message'], 'refresh-all completed'),
+        ));
+        self::assertCount(0, $completed);
+    }
+
     private function definition(): MaterializedViewDefinition
     {
         return MaterializedViewDefinition::create('public.summary')
@@ -312,5 +388,17 @@ final class MaterializedViewManagerTest extends TestCase
                 name: 'idx_summary_product',
                 columns: ['product_id'],
             ));
+    }
+
+    private function baseDefinition(): MaterializedViewDefinition
+    {
+        return MaterializedViewDefinition::create('public.base')
+            ->fromSql(InlineSqlSource::fromString('SELECT 1 AS id'));
+    }
+
+    private function rollupDefinition(): MaterializedViewDefinition
+    {
+        return MaterializedViewDefinition::create('public.rollup')
+            ->fromSql(InlineSqlSource::fromString('SELECT id FROM public.base'));
     }
 }

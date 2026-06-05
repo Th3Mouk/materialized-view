@@ -5,7 +5,28 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.2.0]
+
+### Added
+- **The failing view and an aggregate rollup are now logged when a batch
+  `sync` / `refresh-all` aborts under the `fail` policy.** Previously an error
+  raised while building or refreshing a view simply propagated to the caller
+  with no library record, so the boot output (and Datadog) never named the view
+  that broke. The batch operations now emit PSR-3 records on the same logger as
+  the rest of the library, then re-throw the original error untouched:
+  - `MaterializedViewSynchronizer::synchronize()` logs an `error`
+    (`synchronisation aborted while building "{view}"`) carrying the failing
+    `view`, its `action` (`create`/`rebuild`), the `sqlstate_reason`, and a
+    progress rollup (`created`, `rebuilt`, `skipped`, `remaining`, `managed`).
+  - `MaterializedViewManager::refreshAll()` now brackets the batch with `info`
+    records (`refresh-all started` / `refresh-all completed`, with `refreshed`
+    and `total`) and, on failure, logs an `error` (`refresh-all aborted at
+    "{view}"`) naming the failing `view` with a `refreshed` / `remaining` /
+    `total` rollup.
+
+  Only observability is added — the exception still propagates unchanged, so the
+  caller keeps full control over exit behaviour while operators get the failing
+  view and partial progress in the logs.
 
 ## [1.1.0] - 2026-06-05
 
@@ -54,6 +75,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   doubles configured without expectations use `createStub()` / `getStubBuilder()`
   as required by PHPUnit 13.
 
-[Unreleased]: https://github.com/Th3Mouk/materialized-view/compare/v1.1.0...HEAD
+[1.2.0]: https://github.com/Th3Mouk/materialized-view/compare/v1.1.0...HEAD
 [1.1.0]: https://github.com/Th3Mouk/materialized-view/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/Th3Mouk/materialized-view/releases/tag/v1.0.0

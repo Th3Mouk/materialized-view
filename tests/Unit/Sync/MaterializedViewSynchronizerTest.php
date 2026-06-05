@@ -360,6 +360,39 @@ final class MaterializedViewSynchronizerTest extends TestCase
         );
     }
 
+    public function testFailPolicyLogsTheFailingViewAndAnAggregateRollupBeforeRethrowing(): void
+    {
+        $executed = [];
+        $logger = new CollectingLogger();
+        $connection = FakeConnectionFactory::create(
+            $this,
+            executed: $executed,
+            dependencyEdges: [FakeConnectionFactory::dependencyEdge('public.broken', 'public.summary')],
+            createFailureSqlStateByView: ['public.broken' => '42P01'],
+        );
+
+        $broken = MaterializedViewDefinition::create('public.broken')
+            ->fromSql(InlineSqlSource::fromString('SELECT product_id AS id FROM public.summary'))
+            ->withNoData();
+
+        try {
+            $this->synchronizerFor($connection, $logger)->synchronize(
+                MaterializedViewRegistry::fromDefinitions([$broken, $this->summaryDefinition()]),
+            );
+            self::fail('Expected the missing dependency to propagate under the default fail policy.');
+        } catch (DriverException) {
+            // expected: under the fail policy the error propagates to the caller untouched.
+        }
+
+        $errors = $logger->recordsAtLevel(LogLevel::ERROR);
+        self::assertCount(1, $errors);
+        self::assertStringContainsString('aborted', $errors[0]['message']);
+        self::assertSame('public.broken', $errors[0]['context']['view'] ?? null);
+        self::assertSame(1, $errors[0]['context']['created'] ?? null);
+        self::assertSame(0, $errors[0]['context']['remaining'] ?? null);
+        self::assertArrayHasKey('sqlstate_reason', $errors[0]['context']);
+    }
+
     public function testSkipPolicyLogsContinuesAndReportsSkippedWhileStillBuildingHealthyViews(): void
     {
         $executed = [];

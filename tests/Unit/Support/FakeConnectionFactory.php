@@ -21,6 +21,7 @@ final readonly class FakeConnectionFactory
      * @param list<array<string, string>>                $dependencyEdges
      * @param array<string, list<array<string, string>>> $grantRowsByView
      * @param array<string, string>                      $createFailureSqlStateByView
+     * @param array<string, string>                      $refreshFailureSqlStateByView
      */
     public static function create(
         TestCase $testCase,
@@ -31,6 +32,7 @@ final readonly class FakeConnectionFactory
         array $dependencyEdges = [],
         array $grantRowsByView = [],
         array $createFailureSqlStateByView = [],
+        array $refreshFailureSqlStateByView = [],
     ): Connection&Stub {
         $platform = new PostgreSQLPlatform();
 
@@ -117,11 +119,19 @@ final readonly class FakeConnectionFactory
 
         $connection
             ->method('executeStatement')
-            ->willReturnCallback(static function (string $sql) use (&$executed, $createFailureSqlStateByView): int {
+            ->willReturnCallback(static function (string $sql) use (&$executed, $createFailureSqlStateByView, $refreshFailureSqlStateByView): int {
                 $executed[] = $sql;
 
                 if (str_contains($sql, 'CREATE MATERIALIZED VIEW')) {
                     foreach ($createFailureSqlStateByView as $view => $sqlState) {
+                        if (str_contains($sql, self::quoteQualified($view))) {
+                            throw self::dbalDriverException($sqlState);
+                        }
+                    }
+                }
+
+                if (str_contains($sql, 'REFRESH MATERIALIZED VIEW')) {
+                    foreach ($refreshFailureSqlStateByView as $view => $sqlState) {
                         if (str_contains($sql, self::quoteQualified($view))) {
                             throw self::dbalDriverException($sqlState);
                         }
