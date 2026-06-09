@@ -10,9 +10,12 @@ use Psr\Log\NullLogger;
 use Th3Mouk\MaterializedView\Core\Definition\MaterializedViewDefinition;
 use Th3Mouk\MaterializedView\Core\Definition\MaterializedViewName;
 use Th3Mouk\MaterializedView\Core\Dependency\CatalogDependencyResolver;
+use Th3Mouk\MaterializedView\Core\Dependency\ConflictDropClosure;
 use Th3Mouk\MaterializedView\Core\Dependency\DropDependentPolicy;
 use Th3Mouk\MaterializedView\Core\Dependency\ExternalDependencyGuard;
+use Th3Mouk\MaterializedView\Core\Dependency\PostgresDependencyConflict;
 use Th3Mouk\MaterializedView\Core\Exception\MissingUniqueIndexForConcurrentRefresh;
+use Th3Mouk\MaterializedView\Core\Exception\UnmanagedDependentFound;
 use Th3Mouk\MaterializedView\Core\Exception\ViewNotPopulated;
 use Th3Mouk\MaterializedView\Core\Hashing\DefinitionHasher;
 use Th3Mouk\MaterializedView\Core\Introspection\PostgreSqlMaterializedViewIntrospector;
@@ -147,6 +150,77 @@ final readonly class MaterializedViewManager
         $this->readinessChecker->forget($name);
 
         $this->logger->info('Dropped materialized view "{view}".', ['view' => $name->qualifiedName()]);
+    }
+
+    /**
+     * Reactively clear a migration DDL conflict by dropping ONLY the managed materialized
+     * views that block it (and their managed dependents), in safe drop order. The blocked
+     * relation is read from the parsed PostgreSQL error, but the drop closure is resolved
+     * from the system catalog — never from the locale-dependent error text alone.
+     *
+     * Refuses (throws {@see UnmanagedDependentFound}) when the closure contains an unmanaged
+     * dependent, unless the policy is Cascade. Returns the views dropped, in drop order; an
+     * empty array means nothing was resolved (e.g. an unparsable 0A000) and the caller must
+     * fall back. Opens no transaction of its own: the caller wraps the call so the surgical
+     * drop and the migration retry share one unit of work.
+     *
+     * @return list<MaterializedViewName>
+     */
+    public function dropConflictClosure(
+        PostgresDependencyConflict $conflict,
+        DropDependentPolicy $dropDependentPolicy = DropDependentPolicy::Refuse,
+    ): array {
+        $this->primaryConnectionGuard->ensureConnectedToPrimary();
+
+        $closure = $this->resolveConflictClosure($conflict);
+
+        if (DropDependentPolicy::Cascade !== $dropDependentPolicy && $closure->hasUnmanagedDependents()) {
+            throw UnmanagedDependentFound::blockingConflictDrop($closure->unmanagedDependents);
+        }
+
+        $cascade = DropDependentPolicy::Cascade === $dropDependentPolicy;
+        $dropped = [];
+
+        foreach ($closure->managedDropOrder as $name) {
+            $this->connection->executeStatement($this->sqlGenerator->drop($name, true, $cascade));
+            $this->readinessChecker->forget($name);
+            $dropped[] = $name;
+
+            $this->logger->info('Reactively dropped materialized view "{view}" to clear a migration dependency conflict ({sql_state}).', [
+                'view' => $name->qualifiedName(),
+                'sql_state' => $conflict->sqlState(),
+            ]);
+        }
+
+        return $dropped;
+    }
+
+    private function resolveConflictClosure(PostgresDependencyConflict $conflict): ConflictDropClosure
+    {
+        $resolver = new CatalogDependencyResolver($this->connection);
+
+        // The DETAIL dependents are the *precise* blockers (the views actually using the
+        // dropped column / altered type), so seed from each of them — including the seed
+        // itself, which must be dropped — rather than from the blocked table, whose other
+        // dependents may not block this DDL at all. Fall back to the table walk only when
+        // the (locale-dependent) DETAIL could not be parsed.
+        if ($conflict->isParsed()) {
+            $closure = ConflictDropClosure::empty();
+
+            foreach ($conflict->dependents() as $dependent) {
+                $closure = $closure->merge($resolver->resolveConflictClosure($dependent->name, true));
+            }
+
+            return $closure;
+        }
+
+        $blockedRelation = $conflict->blockedRelation();
+
+        if (null === $blockedRelation) {
+            return ConflictDropClosure::empty();
+        }
+
+        return $resolver->resolveConflictClosure($blockedRelation);
     }
 
     public function refresh(MaterializedViewDefinition $definition, ?RefreshOptions $options = null): void

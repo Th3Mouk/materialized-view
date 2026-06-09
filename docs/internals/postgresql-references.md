@@ -83,6 +83,15 @@ Without `deptype = 'n'` and the self-exclusion, the `_RETURN` rule reports the v
 - **DROP MATERIALIZED VIEW** — <https://www.postgresql.org/docs/17/sql-dropmaterializedview.html>
   - Without `CASCADE`, the drop **fails** if any object depends on the view. The library never adds `CASCADE` implicitly; `ExternalDependencyGuard` refuses first.
 
+### Reactive dependency conflicts (migration-blocked DDL)
+
+When a schema migration tries to `DROP TABLE`/`DROP COLUMN` or `ALTER COLUMN … TYPE` on a relation a materialized view reads, PostgreSQL blocks it with one of two SQLSTATEs. `DependencyConflictSqlState` gates on the SQLSTATE (read from the DBAL driver-exception chain), never the message text — the wording is emitted in the server's `lc_messages`, which the application role cannot pin (`SET`/`PGOPTIONS` are superuser-only).
+
+- **`2BP01`** `dependent_objects_still_exist` — a blocked `DROP TABLE` / `DROP COLUMN`. The `ERROR` line names the blocked relation; `DETAIL` lists the dependents (`<materialized view|view> <name> depends on …`).
+- **`0A000`** `feature_not_supported` — a blocked `ALTER COLUMN … TYPE`. The `ERROR` line names neither table nor column; only `DETAIL` names the object, via its rewrite rule (`rule _RETURN on <materialized view|view> <name> …`). `0A000` is also raised by unrelated statements, so a gated SQLSTATE is necessary but never sufficient.
+
+`PostgresDependencyConflict` parses the error best-effort (the `DETAIL` list is capped at 100 entries — "and N other objects" — so it is only ever a *seed*). The authoritative closure is always resolved from the catalog by `CatalogDependencyResolver::resolveConflictClosure()`: it resolves the seed once via **`to_regclass`** and then walks `pg_depend` → `pg_rewrite` by OID. Unlike the managed-graph query above, this walk seeds from an **arbitrary relation** (typically a plain table, `relkind 'r'`, which is *not* a node in the managed graph) and classifies each dependent as managed (matview carrying the `ManagementMarker` comment) or unmanaged. The precise blockers are the `DETAIL` dependents (the views actually using the column), so the consumer seeds the closure from each of them; the blocked-table walk is the fallback when `DETAIL` is unparsable. `MaterializedViewManager::dropConflictClosure()` drops the managed closure in dependents-first order and refuses (`UnmanagedDependentFound`) if any unmanaged dependent is present.
+
 ## Privileges & comments
 
 - **GRANT** — <https://www.postgresql.org/docs/17/sql-grant.html> — dropping an object removes its privileges; a rebuild must re-apply them. See [Privileges](../guide/privileges.md).

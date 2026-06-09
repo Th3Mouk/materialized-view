@@ -32,4 +32,16 @@ final class UnmanagedDependentFound extends RuntimeException implements Material
             '' === implode(', ', $dependentNames) ? 'unknown' : implode(', ', $dependentNames),
         ));
     }
+
+    /**
+     * @param list<string> $dependentNames
+     */
+    public static function blockingConflictDrop(array $dependentNames): self
+    {
+        return new self(\sprintf(
+            'Refusing to reactively drop materialized views to clear a migration dependency conflict: '
+            .'the conflict closure includes unmanaged dependents (%s). Drop or migrate them first; CASCADE is never implicit.',
+            '' === implode(', ', $dependentNames) ? 'unknown' : implode(', ', $dependentNames),
+        ));
+    }
 }
