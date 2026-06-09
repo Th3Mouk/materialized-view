@@ -27,6 +27,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Only observability is added — the exception still propagates unchanged, so the
   caller keeps full control over exit behaviour while operators get the failing
   view and partial progress in the logs.
+- **Reactive dependency-conflict primitives**, enabling a consumer (such as the
+  Symfony bundle's deploy lane) to clear a migration blocked by a managed
+  materialized view by dropping *only* the conflicting closure instead of every
+  managed view:
+  - `Core\Sql\DependencyConflictSqlState` recognises the two SQLSTATEs a blocking
+    view raises — `2BP01` (`dependent_objects_still_exist`, a blocked
+    `DROP TABLE` / `DROP COLUMN`) and `0A000` (`feature_not_supported`, a blocked
+    `ALTER COLUMN ... TYPE`) — by walking the DBAL driver-exception chain, never
+    the locale-dependent message text.
+  - `Core\Dependency\PostgresDependencyConflict` parses such an error
+    (best-effort, locale-aware) into the blocked relation and the dependent
+    objects it names; `Core\Sql\QualifiedName` adds the quote-aware identifier
+    scanner this requires.
+  - `Core\Dependency\CatalogDependencyResolver::resolveConflictClosure()` resolves,
+    from the system catalog, the transitive **managed** matview dependents of an
+    arbitrary relation (typically a plain table, which is not a node in the
+    managed graph) in safe drop order, plus any unmanaged dependents found.
+  - `Core\MaterializedViewManager::dropConflictClosure()` drops that closure in
+    order, refusing (`UnmanagedDependentFound`) when it contains an unmanaged
+    dependent unless `DropDependentPolicy::Cascade` is given. The drop set is
+    always confirmed against the catalog, never from the error text alone.
+  - `Core\Sql\ManagementMarker` gains read-side helpers (`isManagedComment()`,
+    `readHash()`) so a catalog comment can be classified as library-managed.
+
+  These are framework-agnostic primitives only; no existing behaviour changes.
 
 ## [1.1.0] - 2026-06-05
 

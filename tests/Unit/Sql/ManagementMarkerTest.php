@@ -42,4 +42,30 @@ final class ManagementMarkerTest extends TestCase
             $decoded,
         );
     }
+
+    public function testRecognisesItsOwnCommentAsManaged(): void
+    {
+        self::assertTrue(ManagementMarker::isManagedComment(ManagementMarker::create('abc123')->toJson()));
+    }
+
+    public function testTreatsNullEmptyAndMalformedCommentsAsUnmanaged(): void
+    {
+        self::assertFalse(ManagementMarker::isManagedComment(null));
+        self::assertFalse(ManagementMarker::isManagedComment(''));
+        self::assertFalse(ManagementMarker::isManagedComment('{not valid json'));
+    }
+
+    public function testDoesNotMatchTheMarkerKeyAsASubstringOfFreeText(): void
+    {
+        self::assertFalse(ManagementMarker::isManagedComment('a human note mentioning th3mouk_materialized_view in passing'));
+        self::assertFalse(ManagementMarker::isManagedComment('{"other_key":{"th3mouk_materialized_view":"nested, not top-level"}}'));
+    }
+
+    public function testReadsTheHashOnlyFromAValidMarker(): void
+    {
+        self::assertSame('abc123', ManagementMarker::readHash(ManagementMarker::create('abc123')->toJson()));
+        self::assertNull(ManagementMarker::readHash('{"th3mouk_materialized_view":{"version":1}}'));
+        self::assertNull(ManagementMarker::readHash(null));
+        self::assertNull(ManagementMarker::readHash('not json'));
+    }
 }
