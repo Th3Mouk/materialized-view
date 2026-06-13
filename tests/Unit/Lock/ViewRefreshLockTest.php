@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace Th3Mouk\MaterializedView\Tests\Unit\Lock;
 
-use Doctrine\DBAL\Connection;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LogLevel;
+use Th3Mouk\MaterializedView\Core\Database\Connection;
 use Th3Mouk\MaterializedView\Core\Definition\MaterializedViewName;
 use Th3Mouk\MaterializedView\Core\Lock\StableLockKeyGenerator;
 use Th3Mouk\MaterializedView\Core\Lock\ViewRefreshLock;

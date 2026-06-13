@@ -4,7 +4,7 @@ Why the library is shaped the way it is, the trade-offs taken, and the guarantee
 
 ## The twelve decisions
 
-1. **DBAL first.** The core depends on Doctrine DBAL, not Symfony nor the ORM.
+1. **Connection port; Doctrine optional.** The core runs on a tiny `Core\Database\Connection` port, not on Doctrine directly. A Doctrine DBAL adapter (`Dbal\DbalConnection`) is the recommended, natively-supported backend; a `Pdo\PdoConnection` adapter runs the engine without Doctrine. Never Symfony, never the ORM, in `Core`.
 2. **PostgreSQL only at MVP.** Materialized views have PostgreSQL-specific semantics.
 3. **SQL source of truth = versioned `.sql` files.** No large PHP heredoc as the recommended mode.
 4. **Declarative synchronisation by default.** `matview:sync`, plus an optional Doctrine Migrations lane for Symfony apps.
@@ -19,7 +19,7 @@ Why the library is shaped the way it is, the trade-offs taken, and the guarantee
 
 ## Why these choices
 
-- **Why DBAL** — it knows the real connection, the primary/replica wrappers, middlewares, profiling, transactions and the PostgreSQL driver. It is the right level to run DDL and refresh.
+- **Why a connection port, DBAL optional** — the engine only needs to run statements, fetch rows and open a transaction; that is a tiny surface. Expressing it as a port keeps `Core` free of any database library, so a project without Doctrine can drive materialized views over a bare PDO connection. DBAL stays the recommended backend because it knows the real connection, the primary/replica wrappers, middlewares, profiling, transactions and the PostgreSQL driver — its adapter reuses all of that; the PDO adapter trades those operational features for a zero-dependency footprint. Quoting is PostgreSQL-native PHP (identical output to DBAL's platform), so it needs no driver at all.
 - **Why a `.sql` file over a PHP heredoc** — syntax highlighting, direct `psql` execution, readable Git diffs, simpler review, easy scaffolding, better team adoption. The PHP class stays for the name, indexes, options and strategy.
 - **Why declarative by default** — it is what makes the boot lane safe when the same managed views run across many databases/connections: drop managed projections before table DDL, recreate them after migrations, so a developer never has to guess which migration must drop which view.
 - **Why not extend DBAL `Schema`** — a materialized view change is not a plain schema diff: no `CREATE OR REPLACE`, potentially destructive rebuild, runtime refresh, `CONCURRENTLY` constraints, indexes and dependencies. A dedicated system keeps those decisions explicit.

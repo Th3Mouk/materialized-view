@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Th3Mouk\MaterializedView\Tests\Unit\Privilege;
 
-use Doctrine\DBAL\Platforms\PostgreSQLPlatform;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 use Th3Mouk\MaterializedView\Core\Definition\MaterializedViewName;
@@ -20,9 +19,7 @@ final class GrantStatementGeneratorTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->generator = new GrantStatementGenerator(
-            IdentifierQuoter::forPlatform(new PostgreSQLPlatform()),
-        );
+        $this->generator = new GrantStatementGenerator(new IdentifierQuoter());
     }
 
     public function testGeneratesNoStatementsForEmptySnapshot(): void

@@ -4,30 +4,21 @@ declare(strict_types=1);
 
 namespace Th3Mouk\MaterializedView\Core\Sql;
 
-use Doctrine\DBAL\Connection;
-use Doctrine\DBAL\Platforms\AbstractPlatform;
 use Th3Mouk\MaterializedView\Core\Definition\MaterializedViewName;
 
+/**
+ * PostgreSQL-native identifier and literal quoting.
+ *
+ * Quoting is deterministic for PostgreSQL, so the library does it in plain PHP
+ * instead of going through a database driver — this keeps `Core` free of any
+ * connection dependency. The output is byte-for-byte identical to Doctrine
+ * DBAL's `PostgreSQLPlatform`.
+ */
 final readonly class IdentifierQuoter
 {
-    private function __construct(
-        private AbstractPlatform $platform,
-    ) {
-    }
-
-    public static function forConnection(Connection $connection): self
-    {
-        return new self($connection->getDatabasePlatform());
-    }
-
-    public static function forPlatform(AbstractPlatform $platform): self
-    {
-        return new self($platform);
-    }
-
     public function quoteIdentifier(string $identifier): string
     {
-        return $this->platform->quoteSingleIdentifier($identifier);
+        return '"'.str_replace('"', '""', $identifier).'"';
     }
 
     public function quoteQualifiedName(MaterializedViewName $name): string
@@ -45,6 +36,6 @@ final readonly class IdentifierQuoter
 
     public function quoteStringLiteral(string $value): string
     {
-        return $this->platform->quoteStringLiteral($value);
+        return "'".str_replace("'", "''", $value)."'";
     }
 }

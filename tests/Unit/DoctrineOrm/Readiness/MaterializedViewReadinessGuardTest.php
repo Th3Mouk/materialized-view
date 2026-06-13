@@ -4,11 +4,11 @@ declare(strict_types=1);
 
 namespace Th3Mouk\MaterializedView\Tests\Unit\DoctrineOrm\Readiness;
 
-use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\Mapping\ClassMetadata;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
+use Th3Mouk\MaterializedView\Core\Database\Connection;
 use Th3Mouk\MaterializedView\Core\Exception\ViewNotPopulated;
 use Th3Mouk\MaterializedView\Core\Introspection\ReadinessChecker;
 use Th3Mouk\MaterializedView\DoctrineOrm\Exception\NotAMaterializedViewEntity;

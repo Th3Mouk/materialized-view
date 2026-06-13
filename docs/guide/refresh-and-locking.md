@@ -5,7 +5,7 @@
 ## What `refresh()` does, in order
 
 1. Resolve the definition.
-2. **Force the primary connection** if the connection is a `PrimaryReadReplicaConnection` (`ensureConnectedToPrimary()`). DDL/refresh must never hit a replica.
+2. **Force the primary connection** (`ensureConnectedToPrimary()`). On the Doctrine DBAL backend this switches a `PrimaryReadReplicaConnection` to the primary so DDL/refresh never hits a replica; on a bare PDO connection there is no read/write split and this is a no-op. See [Connection backends](connection-backends.md).
 3. Apply `lock_timeout` and `statement_timeout`.
 4. Take a **per-view advisory lock**: `pg_advisory_lock(lock_namespace, view_key)`.
 5. Validate `CONCURRENTLY` preconditions: view populated, a complete UNIQUE index (no predicate, no expression).

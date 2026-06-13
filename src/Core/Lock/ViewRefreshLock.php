@@ -4,11 +4,11 @@ declare(strict_types=1);
 
 namespace Th3Mouk\MaterializedView\Core\Lock;
 
-use Doctrine\DBAL\Connection;
-use Doctrine\DBAL\Exception;
-use Doctrine\DBAL\ParameterType;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
+use Th3Mouk\MaterializedView\Core\Database\Connection;
+use Th3Mouk\MaterializedView\Core\Database\DatabaseException;
+use Th3Mouk\MaterializedView\Core\Database\ParameterType;
 use Th3Mouk\MaterializedView\Core\Definition\MaterializedViewName;
 
 final readonly class ViewRefreshLock
@@ -24,7 +24,7 @@ final readonly class ViewRefreshLock
     }
 
     /**
-     * @throws Exception
+     * @throws DatabaseException
      */
     public function acquire(MaterializedViewName $name): void
     {
@@ -33,7 +33,7 @@ final readonly class ViewRefreshLock
         $this->connection->executeStatement(
             'SELECT pg_advisory_lock(?, ?)',
             [$lockKey->namespace, $lockKey->key],
-            [ParameterType::INTEGER, ParameterType::INTEGER],
+            [ParameterType::Integer, ParameterType::Integer],
         );
 
         $this->logger->debug('Acquired refresh advisory lock for materialized view "{view}".', [
@@ -43,7 +43,7 @@ final readonly class ViewRefreshLock
     }
 
     /**
-     * @throws Exception
+     * @throws DatabaseException
      */
     public function tryAcquire(MaterializedViewName $name): bool
     {
@@ -52,7 +52,7 @@ final readonly class ViewRefreshLock
         $acquired = (bool) $this->connection->fetchOne(
             'SELECT pg_try_advisory_lock(?, ?)',
             [$lockKey->namespace, $lockKey->key],
-            [ParameterType::INTEGER, ParameterType::INTEGER],
+            [ParameterType::Integer, ParameterType::Integer],
         );
 
         if (!$acquired) {
@@ -73,7 +73,7 @@ final readonly class ViewRefreshLock
     }
 
     /**
-     * @throws Exception
+     * @throws DatabaseException
      */
     public function release(MaterializedViewName $name): bool
     {
@@ -82,7 +82,7 @@ final readonly class ViewRefreshLock
         $released = (bool) $this->connection->fetchOne(
             'SELECT pg_advisory_unlock(?, ?)',
             [$lockKey->namespace, $lockKey->key],
-            [ParameterType::INTEGER, ParameterType::INTEGER],
+            [ParameterType::Integer, ParameterType::Integer],
         );
 
         $this->logger->debug('Released refresh advisory lock for materialized view "{view}".', [

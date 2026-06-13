@@ -8,7 +8,7 @@ This page gets a materialized view managed by the library in a few minutes, **wi
 composer require th3mouk/materialized-view
 ```
 
-Requirements: **PHP ≥ 8.4**, **Doctrine DBAL ≥ 4.4**, **PostgreSQL** (12+, tested to 17).
+Requirements: **PHP ≥ 8.4**, **PostgreSQL** (12+, tested to 17), and one connection backend — **Doctrine DBAL ≥ 4.4** (`composer require doctrine/dbal`, recommended) **or** the **`pdo_pgsql`** extension. Doctrine is optional and natively supported; see [Connection backends](guide/connection-backends.md).
 
 ## 2. Write the view's SQL
 
@@ -61,7 +61,23 @@ final class SalesByCategoryView
 
 > The **unique index** is not optional if you ever want `REFRESH … CONCURRENTLY`: PostgreSQL requires one. See [Refresh runtime & locking](guide/refresh-and-locking.md).
 
-## 4. Synchronise and refresh
+## 4. Build the manager
+
+Wire the manager onto your connection backend. Doctrine is optional:
+
+```php
+use Th3Mouk\MaterializedView\Core\MaterializedViewManager;
+
+// Recommended — keeps DBAL's primary/replica routing, middlewares and profiling:
+$manager = MaterializedViewManager::forConnection($dbalConnection);
+
+// …or, without Doctrine, on a bare PDO connection (the pdo_pgsql driver):
+$manager = MaterializedViewManager::forPdo(new PDO($dsn, $user, $password));
+```
+
+Both return the same `MaterializedViewManager`; everything below behaves identically.
+
+## 5. Synchronise and refresh
 
 ```php
 use Th3Mouk\MaterializedView\Core\Registry\MaterializedViewRegistry;
@@ -78,11 +94,11 @@ $manager->syncAll($registry);
 $manager->refresh(SalesByCategoryView::definition());
 ```
 
-`$manager` is a `Th3Mouk\MaterializedView\Core\MaterializedViewManager` built from your DBAL `Connection`. The bundle builds and wires it for you; framework-agnostic construction is shown in [Architecture](internals/architecture.md).
+On Symfony, the bundle builds and wires `$manager` for you (one per connection). The construction options are detailed in [Connection backends](guide/connection-backends.md).
 
-## 5. Read it
+## 6. Read it
 
-A materialized view is just a relation: query it with DBAL, or map a **read-only** Doctrine entity onto it — see [Doctrine ORM integration](guide/doctrine-orm-integration.md).
+A materialized view is just a relation: query it directly, or map a **read-only** Doctrine entity onto it — see [Doctrine ORM integration](guide/doctrine-orm-integration.md).
 
 > ⚠️ A view created `WITH NO DATA` raises a hard error if you read it before its first refresh. Pick a [population policy](guide/population-and-readiness.md) that matches how the view is consumed.
 

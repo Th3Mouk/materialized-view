@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Th3Mouk\MaterializedView\Tests\Unit\Sql;
 
-use Doctrine\DBAL\Platforms\PostgreSQLPlatform;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 use Th3Mouk\MaterializedView\Core\Definition\InlineSqlSource;
@@ -27,9 +26,7 @@ final class PostgreSqlMaterializedViewSqlGeneratorTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->generator = new PostgreSqlMaterializedViewSqlGenerator(
-            IdentifierQuoter::forPlatform(new PostgreSQLPlatform()),
-        );
+        $this->generator = new PostgreSqlMaterializedViewSqlGenerator(new IdentifierQuoter());
     }
 
     public function testCreateWithNoData(): void
