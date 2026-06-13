@@ -14,6 +14,7 @@ use Th3Mouk\MaterializedView\Core\Definition\MaterializedViewName;
 use Th3Mouk\MaterializedView\Core\Lock\LaneLock;
 use Th3Mouk\MaterializedView\Core\Lock\StableLockKeyGenerator;
 use Th3Mouk\MaterializedView\Core\Lock\ViewRefreshLock;
+use Th3Mouk\MaterializedView\Dbal\DbalConnection;
 
 #[Group('lock')]
 #[Group('integration')]
@@ -62,8 +63,8 @@ final class ViewRefreshLockTest extends TestCase
     {
         $view = MaterializedViewName::fromString('public.sales_by_category');
 
-        $heldLock = new ViewRefreshLock($this->holder, $this->keyGenerator);
-        $contendingLock = new ViewRefreshLock($this->contender, $this->keyGenerator);
+        $heldLock = new ViewRefreshLock(new DbalConnection($this->holder), $this->keyGenerator);
+        $contendingLock = new ViewRefreshLock(new DbalConnection($this->contender), $this->keyGenerator);
 
         $heldLock->acquire($view);
 
@@ -85,8 +86,8 @@ final class ViewRefreshLockTest extends TestCase
         $first = MaterializedViewName::fromString('public.sales_by_category');
         $second = MaterializedViewName::fromString('public.orders');
 
-        $firstLock = new ViewRefreshLock($this->holder, $this->keyGenerator);
-        $secondLock = new ViewRefreshLock($this->contender, $this->keyGenerator);
+        $firstLock = new ViewRefreshLock(new DbalConnection($this->holder), $this->keyGenerator);
+        $secondLock = new ViewRefreshLock(new DbalConnection($this->contender), $this->keyGenerator);
 
         $firstLock->acquire($first);
 
@@ -105,8 +106,8 @@ final class ViewRefreshLockTest extends TestCase
     public function testRefreshAndLaneKeySpacesDoNotCollide(): void
     {
         $view = MaterializedViewName::fromString('public.sales_by_category');
-        $refreshLock = new ViewRefreshLock($this->holder, $this->keyGenerator);
-        $laneLock = new LaneLock($this->contender, self::LANE_NAMESPACE);
+        $refreshLock = new ViewRefreshLock(new DbalConnection($this->holder), $this->keyGenerator);
+        $laneLock = new LaneLock(new DbalConnection($this->contender), self::LANE_NAMESPACE);
 
         $refreshLock->acquire($view);
 

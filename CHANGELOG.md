@@ -5,6 +5,39 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0]
+
+### Added
+- **Doctrine DBAL is now optional — the core runs on any connection backend.**
+  The engine talks to PostgreSQL through a new
+  `Th3Mouk\MaterializedView\Core\Database\Connection` port
+  (`executeStatement` / `fetchOne` / `fetchAllAssociative` / `fetchAssociative` /
+  `transactional` / `ensureConnectedToPrimary`), so `Core` no longer depends on
+  Doctrine DBAL. Two adapters ship with the package:
+  - `Th3Mouk\MaterializedView\Dbal\DbalConnection` — wraps a Doctrine DBAL
+    connection and keeps its primary/replica routing, middlewares and profiling.
+  - `Th3Mouk\MaterializedView\Pdo\PdoConnection` — wraps a bare `PDO` handle (the
+    `pdo_pgsql` driver) for projects that do not run Doctrine.
+
+  New factories on `MaterializedViewManager`: `forDriver(Connection $connection, …)`
+  (framework-agnostic) and `forPdo(PDO $pdo, …)` (bare PDO). Backend failures are
+  normalised to `Th3Mouk\MaterializedView\Core\Database\DatabaseException`, which
+  carries the SQLSTATE so missing-dependency handling keeps working on either
+  backend. See [Connection backends](docs/guide/connection-backends.md).
+
+### Changed
+- **`doctrine/dbal` moved from `require` to `suggest`.** The core now requires only
+  `php` and `psr/log`. `MaterializedViewManager::forConnection(Doctrine\DBAL\Connection)`
+  is unchanged and keeps working exactly as before — it now wraps the connection in
+  `DbalConnection` internally — so **existing Doctrine code (and the Symfony bundle)
+  needs no changes**. Install `doctrine/dbal` for the recommended, natively-supported
+  Doctrine backend, or rely on `ext-pdo_pgsql` with `forPdo()` and no extra Composer
+  dependency. `IdentifierQuoter` is now PostgreSQL-native (it no longer needs a DBAL
+  platform); its internal `forConnection()` / `forPlatform()` factories were removed.
+  The optional reactive-conflict helpers (`PostgresDependencyConflict::fromDriverException()`,
+  `DependencyConflictSqlState::isDependencyConflict()`) remain Doctrine-oriented; on a
+  bare PDO backend, classify with `PostgresDependencyConflict::fromRawError()`.
+
 ## [1.2.0] - 2026-06-09
 
 ### Added
@@ -100,6 +133,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   doubles configured without expectations use `createStub()` / `getStubBuilder()`
   as required by PHPUnit 13.
 
+[1.3.0]: https://github.com/Th3Mouk/materialized-view/compare/v1.2.0...HEAD
 [1.2.0]: https://github.com/Th3Mouk/materialized-view/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/Th3Mouk/materialized-view/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/Th3Mouk/materialized-view/releases/tag/v1.0.0

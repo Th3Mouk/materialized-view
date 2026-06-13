@@ -13,6 +13,7 @@ use PHPUnit\Framework\TestCase;
 use Th3Mouk\MaterializedView\Core\Definition\MaterializedViewName;
 use Th3Mouk\MaterializedView\Core\Introspection\PostgreSqlMaterializedViewIntrospector;
 use Th3Mouk\MaterializedView\Core\Introspection\ReadinessChecker;
+use Th3Mouk\MaterializedView\Dbal\DbalConnection;
 
 #[Group('integration')]
 #[Group('introspection')]
@@ -52,8 +53,9 @@ final class PostgreSqlIntrospectionTest extends TestCase
     public function testIntrospectsAnUnpopulatedThenPopulatedMaterializedView(): void
     {
         $name = MaterializedViewName::create(self::SCHEMA, self::VIEW);
-        $introspector = new PostgreSqlMaterializedViewIntrospector($this->connection);
-        $readiness = new ReadinessChecker($this->connection);
+        $driver = new DbalConnection($this->connection);
+        $introspector = new PostgreSqlMaterializedViewIntrospector($driver);
+        $readiness = new ReadinessChecker($driver);
 
         $this->connection->executeStatement(\sprintf(
             'CREATE MATERIALIZED VIEW %s.%s AS SELECT 1 AS id, 42 AS score WITH NO DATA',
@@ -104,7 +106,7 @@ final class PostgreSqlIntrospectionTest extends TestCase
 
     public function testFindReturnsNullForAbsentView(): void
     {
-        $introspector = new PostgreSqlMaterializedViewIntrospector($this->connection);
+        $introspector = new PostgreSqlMaterializedViewIntrospector(new DbalConnection($this->connection));
 
         self::assertNull($introspector->find(MaterializedViewName::create(self::SCHEMA, 'matview_absent_probe')));
         self::assertFalse($introspector->exists(MaterializedViewName::create(self::SCHEMA, 'matview_absent_probe')));

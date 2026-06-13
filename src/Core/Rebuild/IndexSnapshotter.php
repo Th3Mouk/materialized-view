@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Th3Mouk\MaterializedView\Core\Rebuild;
 
-use Doctrine\DBAL\Connection;
+use Th3Mouk\MaterializedView\Core\Database\Connection;
 use Th3Mouk\MaterializedView\Core\Definition\MaterializedViewName;
 
 final readonly class IndexSnapshotter

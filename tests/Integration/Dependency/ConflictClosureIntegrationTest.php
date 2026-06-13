@@ -17,6 +17,7 @@ use Th3Mouk\MaterializedView\Core\Exception\UnmanagedDependentFound;
 use Th3Mouk\MaterializedView\Core\MaterializedViewManager;
 use Th3Mouk\MaterializedView\Core\Sql\ManagementMarker;
 use Th3Mouk\MaterializedView\Core\Sql\QualifiedName;
+use Th3Mouk\MaterializedView\Dbal\DbalConnection;
 
 #[Group('dependency')]
 #[Group('integration')]
@@ -80,7 +81,7 @@ final class ConflictClosureIntegrationTest extends TestCase
         $this->createManagedMatview('order_totals', 'SELECT id, total FROM orders');
         $this->createManagedMatview('order_totals_rollup', 'SELECT id FROM order_totals');
 
-        $closure = new CatalogDependencyResolver($this->connection)
+        $closure = new CatalogDependencyResolver(new DbalConnection($this->connection))
             ->resolveConflictClosure(new QualifiedName(self::SCHEMA, 'orders'));
 
         self::assertFalse($closure->hasUnmanagedDependents());

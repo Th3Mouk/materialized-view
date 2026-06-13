@@ -12,6 +12,7 @@ Set the library up and ship your first materialized view fast.
 
 One focused page per non-trivial concept. Read what you need.
 
+- [Connection backends](guide/connection-backends.md) — Doctrine DBAL vs. bare PDO, the `Connection` port, what Doctrine adds, error handling
 - [Defining views](guide/defining-views.md) — the definition model, SQL files, indexes, generated SQL, naming/versioning
 - [Population & read safety](guide/population-and-readiness.md) — `WITH NO DATA`, the unpopulated-read error, population policies, the boot triangle
 - [Rebuild strategies](guide/rebuild-strategies.md) — `drop_create`, `side_by_side`, index re-application, external dependents

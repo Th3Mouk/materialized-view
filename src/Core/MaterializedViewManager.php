@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace Th3Mouk\MaterializedView\Core;
 
-use Doctrine\DBAL\Connection;
+use Doctrine\DBAL\Connection as DoctrineConnection;
+use PDO;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
+use Th3Mouk\MaterializedView\Core\Database\Connection;
 use Th3Mouk\MaterializedView\Core\Definition\MaterializedViewDefinition;
 use Th3Mouk\MaterializedView\Core\Definition\MaterializedViewName;
 use Th3Mouk\MaterializedView\Core\Dependency\CatalogDependencyResolver;
@@ -36,6 +38,8 @@ use Th3Mouk\MaterializedView\Core\Sync\MaterializedViewComparator;
 use Th3Mouk\MaterializedView\Core\Sync\MaterializedViewSynchronizer;
 use Th3Mouk\MaterializedView\Core\Sync\SyncOptions;
 use Th3Mouk\MaterializedView\Core\Sync\SyncOutcome;
+use Th3Mouk\MaterializedView\Dbal\DbalConnection;
+use Th3Mouk\MaterializedView\Pdo\PdoConnection;
 use Throwable;
 
 final readonly class MaterializedViewManager
@@ -52,18 +56,23 @@ final readonly class MaterializedViewManager
         private ViewRefreshLock $refreshLock,
         private DefinitionHasher $hasher,
         private MaterializedViewSynchronizer $synchronizer,
+        private IdentifierQuoter $quoter,
         private LoggerInterface $logger,
     ) {
     }
 
-    public static function forConnection(
+    /**
+     * Framework-agnostic factory: wire the manager onto any {@see Connection}
+     * adapter (Doctrine DBAL, bare PDO, or your own).
+     */
+    public static function forDriver(
         Connection $connection,
         ?LoggerInterface $logger = null,
         int $refreshLockNamespace = self::DEFAULT_REFRESH_LOCK_NAMESPACE,
     ): self {
         $logger ??= new NullLogger();
 
-        $quoter = IdentifierQuoter::forConnection($connection);
+        $quoter = new IdentifierQuoter();
         $sqlGenerator = new PostgreSqlMaterializedViewSqlGenerator($quoter);
         $introspector = new PostgreSqlMaterializedViewIntrospector($connection);
         $hasher = DefinitionHasher::create();
@@ -81,6 +90,7 @@ final readonly class MaterializedViewManager
             sqlGenerator: $sqlGenerator,
             introspector: $introspector,
             hasher: $hasher,
+            quoter: $quoter,
             logger: $logger,
         );
 
@@ -94,8 +104,36 @@ final readonly class MaterializedViewManager
             refreshLock: new ViewRefreshLock($connection, new StableLockKeyGenerator($refreshLockNamespace), $logger),
             hasher: $hasher,
             synchronizer: $synchronizer,
+            quoter: $quoter,
             logger: $logger,
         );
+    }
+
+    /**
+     * Convenience factory for Doctrine DBAL users.
+     *
+     * Wraps the connection so the manager keeps DBAL's primary/replica routing,
+     * middlewares and profiling. Requires `doctrine/dbal`; projects without
+     * Doctrine should use {@see self::forPdo()} instead.
+     */
+    public static function forConnection(
+        DoctrineConnection $connection,
+        ?LoggerInterface $logger = null,
+        int $refreshLockNamespace = self::DEFAULT_REFRESH_LOCK_NAMESPACE,
+    ): self {
+        return self::forDriver(new DbalConnection($connection), $logger, $refreshLockNamespace);
+    }
+
+    /**
+     * Convenience factory for projects without Doctrine: pass a bare PDO handle
+     * connected to PostgreSQL. Requires `ext-pdo_pgsql`.
+     */
+    public static function forPdo(
+        PDO $pdo,
+        ?LoggerInterface $logger = null,
+        int $refreshLockNamespace = self::DEFAULT_REFRESH_LOCK_NAMESPACE,
+    ): self {
+        return self::forDriver(new PdoConnection($pdo), $logger, $refreshLockNamespace);
     }
 
     public function create(MaterializedViewDefinition $definition): void
@@ -344,14 +382,14 @@ final readonly class MaterializedViewManager
         if (null !== $options->lockTimeout) {
             $this->connection->executeStatement(\sprintf(
                 'SET lock_timeout = %s',
-                $this->connection->getDatabasePlatform()->quoteStringLiteral($options->lockTimeout),
+                $this->quoter->quoteStringLiteral($options->lockTimeout),
             ));
         }
 
         if (null !== $options->statementTimeout) {
             $this->connection->executeStatement(\sprintf(
                 'SET statement_timeout = %s',
-                $this->connection->getDatabasePlatform()->quoteStringLiteral($options->statementTimeout),
+                $this->quoter->quoteStringLiteral($options->statementTimeout),
             ));
         }
     }
@@ -371,8 +409,8 @@ final readonly class MaterializedViewManager
     {
         return \sprintf(
             'ANALYZE %s.%s',
-            $this->connection->quoteSingleIdentifier($name->schema),
-            $this->connection->quoteSingleIdentifier($name->name),
+            $this->quoter->quoteIdentifier($name->schema),
+            $this->quoter->quoteIdentifier($name->name),
         );
     }
 

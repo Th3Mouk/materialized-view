@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace Th3Mouk\MaterializedView\Core\Privilege;
 
-use Doctrine\DBAL\Connection;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
+use Th3Mouk\MaterializedView\Core\Database\Connection;
 use Th3Mouk\MaterializedView\Core\Definition\MaterializedViewName;
 
 final readonly class PrivilegeSnapshotter

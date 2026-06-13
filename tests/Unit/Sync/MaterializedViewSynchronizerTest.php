@@ -4,15 +4,14 @@ declare(strict_types=1);
 
 namespace Th3Mouk\MaterializedView\Tests\Unit\Sync;
 
-use Doctrine\DBAL\Connection;
-use Doctrine\DBAL\Exception\DriverException;
-use Doctrine\DBAL\Platforms\PostgreSQLPlatform;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
 use Psr\Log\LogLevel;
 use Psr\Log\NullLogger;
+use Th3Mouk\MaterializedView\Core\Database\Connection;
+use Th3Mouk\MaterializedView\Core\Database\DatabaseException;
 use Th3Mouk\MaterializedView\Core\Definition\InlineSqlSource;
 use Th3Mouk\MaterializedView\Core\Definition\MaterializedViewDefinition;
 use Th3Mouk\MaterializedView\Core\Definition\MaterializedViewIndex;
@@ -353,7 +352,7 @@ final class MaterializedViewSynchronizerTest extends TestCase
             createFailureSqlStateByView: ['public.summary' => '42P01'],
         );
 
-        $this->expectException(DriverException::class);
+        $this->expectException(DatabaseException::class);
 
         $this->synchronizerFor($connection)->synchronize(
             MaterializedViewRegistry::fromDefinitions([$this->summaryDefinition()]),
@@ -380,7 +379,7 @@ final class MaterializedViewSynchronizerTest extends TestCase
                 MaterializedViewRegistry::fromDefinitions([$broken, $this->summaryDefinition()]),
             );
             self::fail('Expected the missing dependency to propagate under the default fail policy.');
-        } catch (DriverException) {
+        } catch (DatabaseException) {
             // expected: under the fail policy the error propagates to the caller untouched.
         }
 
@@ -453,7 +452,7 @@ final class MaterializedViewSynchronizerTest extends TestCase
             createFailureSqlStateByView: ['public.summary' => '42703'],
         );
 
-        $this->expectException(DriverException::class);
+        $this->expectException(DatabaseException::class);
 
         $this->synchronizerFor($connection)->synchronize(
             MaterializedViewRegistry::fromDefinitions([$this->summaryDefinition()]),
@@ -543,17 +542,18 @@ final class MaterializedViewSynchronizerTest extends TestCase
             dependencyResolver: $resolver,
             externalDependencyGuard: new ExternalDependencyGuard($resolver),
             privilegeSnapshotter: new PrivilegeSnapshotter($connection),
-            grantStatementGenerator: new GrantStatementGenerator(IdentifierQuoter::forConnection($connection)),
-            sqlGenerator: $this->sqlGenerator($connection),
+            grantStatementGenerator: new GrantStatementGenerator(new IdentifierQuoter()),
+            sqlGenerator: $this->sqlGenerator(),
             introspector: $introspector,
             hasher: $this->hasher,
+            quoter: new IdentifierQuoter(),
             logger: $logger ?? new NullLogger(),
         );
     }
 
-    private function sqlGenerator(Connection&Stub $connection): PostgreSqlMaterializedViewSqlGenerator
+    private function sqlGenerator(): PostgreSqlMaterializedViewSqlGenerator
     {
-        return new PostgreSqlMaterializedViewSqlGenerator(IdentifierQuoter::forConnection($connection));
+        return new PostgreSqlMaterializedViewSqlGenerator(new IdentifierQuoter());
     }
 
     private function markerJson(MaterializedViewDefinition $definition): string
@@ -569,7 +569,7 @@ final class MaterializedViewSynchronizerTest extends TestCase
             source: $definition->hasSqlSource() ? $definition->sqlSource()->identifier() : null,
         );
 
-        return new PostgreSQLPlatform()->quoteStringLiteral($marker->toJson());
+        return new IdentifierQuoter()->quoteStringLiteral($marker->toJson());
     }
 
     private function summaryDefinition(): MaterializedViewDefinition

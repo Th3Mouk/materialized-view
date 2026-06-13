@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace Th3Mouk\MaterializedView\Tests\Unit;
 
-use Doctrine\DBAL\Exception\DriverException;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LogLevel;
+use Th3Mouk\MaterializedView\Core\Database\DatabaseException;
 use Th3Mouk\MaterializedView\Core\Definition\InlineSqlSource;
 use Th3Mouk\MaterializedView\Core\Definition\MaterializedViewDefinition;
 use Th3Mouk\MaterializedView\Core\Definition\MaterializedViewIndex;
@@ -28,7 +28,7 @@ final class MaterializedViewManagerTest extends TestCase
     public function testCreateEmitsDropCreateIndexCommentSequence(): void
     {
         $executed = [];
-        $manager = MaterializedViewManager::forConnection(
+        $manager = MaterializedViewManager::forDriver(
             FakeConnectionFactory::create($this, [], [], $executed),
         );
 
@@ -55,7 +55,7 @@ final class MaterializedViewManagerTest extends TestCase
     public function testDropEmitsDropIfExists(): void
     {
         $executed = [];
-        $manager = MaterializedViewManager::forConnection(
+        $manager = MaterializedViewManager::forDriver(
             FakeConnectionFactory::create($this, [], [], $executed),
         );
 
@@ -67,7 +67,7 @@ final class MaterializedViewManagerTest extends TestCase
     public function testDropRefusesWhenAnUnmanagedDependentExists(): void
     {
         $executed = [];
-        $manager = MaterializedViewManager::forConnection(
+        $manager = MaterializedViewManager::forDriver(
             FakeConnectionFactory::create(
                 $this,
                 executed: $executed,
@@ -89,7 +89,7 @@ final class MaterializedViewManagerTest extends TestCase
     public function testRefuseDropPolicyEmitsNoCascadeWhenAnUnmanagedDependentExists(): void
     {
         $executed = [];
-        $manager = MaterializedViewManager::forConnection(
+        $manager = MaterializedViewManager::forDriver(
             FakeConnectionFactory::create(
                 $this,
                 executed: $executed,
@@ -111,7 +111,7 @@ final class MaterializedViewManagerTest extends TestCase
     public function testCascadeDropPolicyEmitsDropCascadeAndDoesNotThrowDespiteAnUnmanagedDependent(): void
     {
         $executed = [];
-        $manager = MaterializedViewManager::forConnection(
+        $manager = MaterializedViewManager::forDriver(
             FakeConnectionFactory::create(
                 $this,
                 executed: $executed,
@@ -127,7 +127,7 @@ final class MaterializedViewManagerTest extends TestCase
     public function testCreateRefusesWhenAnUnmanagedDependentExists(): void
     {
         $executed = [];
-        $manager = MaterializedViewManager::forConnection(
+        $manager = MaterializedViewManager::forDriver(
             FakeConnectionFactory::create(
                 $this,
                 executed: $executed,
@@ -149,7 +149,7 @@ final class MaterializedViewManagerTest extends TestCase
     public function testNonConcurrentRefreshLocksRefreshesThenAnalyzes(): void
     {
         $executed = [];
-        $manager = MaterializedViewManager::forConnection(
+        $manager = MaterializedViewManager::forDriver(
             FakeConnectionFactory::create($this, [], [], $executed),
         );
 
@@ -168,7 +168,7 @@ final class MaterializedViewManagerTest extends TestCase
     public function testRefreshWithNoDataDoesNotAnalyzeTheUnpopulatedView(): void
     {
         $executed = [];
-        $manager = MaterializedViewManager::forConnection(
+        $manager = MaterializedViewManager::forDriver(
             FakeConnectionFactory::create($this, [], [], $executed),
         );
 
@@ -183,7 +183,7 @@ final class MaterializedViewManagerTest extends TestCase
     public function testRefreshAppliesAndResetsTimeouts(): void
     {
         $executed = [];
-        $manager = MaterializedViewManager::forConnection(
+        $manager = MaterializedViewManager::forDriver(
             FakeConnectionFactory::create($this, [], [], $executed),
         );
 
@@ -200,7 +200,7 @@ final class MaterializedViewManagerTest extends TestCase
 
     public function testConcurrentRefreshRefusesWhenViewIsAbsent(): void
     {
-        $manager = MaterializedViewManager::forConnection(
+        $manager = MaterializedViewManager::forDriver(
             FakeConnectionFactory::create($this),
         );
 
@@ -211,7 +211,7 @@ final class MaterializedViewManagerTest extends TestCase
 
     public function testConcurrentRefreshRefusesWhenViewExistsButIsNotPopulated(): void
     {
-        $manager = MaterializedViewManager::forConnection(
+        $manager = MaterializedViewManager::forDriver(
             FakeConnectionFactory::create(
                 $this,
                 ['public' => [FakeConnectionFactory::matviewRow('public', 'summary', null, isPopulated: false)]],
@@ -226,7 +226,7 @@ final class MaterializedViewManagerTest extends TestCase
 
     public function testConcurrentRefreshRefusesWhenNoFullUniqueIndexIsDeclared(): void
     {
-        $manager = MaterializedViewManager::forConnection(
+        $manager = MaterializedViewManager::forDriver(
             FakeConnectionFactory::create(
                 $this,
                 ['public' => [FakeConnectionFactory::matviewRow('public', 'summary', null)]],
@@ -242,7 +242,7 @@ final class MaterializedViewManagerTest extends TestCase
     public function testConcurrentRefreshEmitsConcurrentlyWhenPreconditionsHold(): void
     {
         $executed = [];
-        $manager = MaterializedViewManager::forConnection(
+        $manager = MaterializedViewManager::forDriver(
             FakeConnectionFactory::create(
                 $this,
                 ['public' => [FakeConnectionFactory::matviewRow('public', 'summary', null)]],
@@ -259,7 +259,7 @@ final class MaterializedViewManagerTest extends TestCase
     public function testSyncDelegatesToTheSynchronizerAndCreatesAbsentView(): void
     {
         $executed = [];
-        $manager = MaterializedViewManager::forConnection(
+        $manager = MaterializedViewManager::forDriver(
             FakeConnectionFactory::create($this, [], [], $executed),
         );
 
@@ -273,7 +273,7 @@ final class MaterializedViewManagerTest extends TestCase
     {
         $executed = [];
         $logger = new CollectingLogger();
-        $manager = MaterializedViewManager::forConnection(
+        $manager = MaterializedViewManager::forDriver(
             FakeConnectionFactory::create($this, [], [], $executed),
             $logger,
         );
@@ -294,7 +294,7 @@ final class MaterializedViewManagerTest extends TestCase
     {
         $executed = [];
         $logger = new CollectingLogger();
-        $manager = MaterializedViewManager::forConnection(
+        $manager = MaterializedViewManager::forDriver(
             FakeConnectionFactory::create(
                 $this,
                 executed: $executed,
@@ -330,7 +330,7 @@ final class MaterializedViewManagerTest extends TestCase
     {
         $executed = [];
         $logger = new CollectingLogger();
-        $manager = MaterializedViewManager::forConnection(
+        $manager = MaterializedViewManager::forDriver(
             FakeConnectionFactory::create(
                 $this,
                 executed: $executed,
@@ -346,7 +346,7 @@ final class MaterializedViewManagerTest extends TestCase
                 $this->rollupDefinition(),
             ]));
             self::fail('Expected the refresh failure to propagate to the caller.');
-        } catch (DriverException) {
+        } catch (DatabaseException) {
             // expected: refresh-all aborts at the failing view and the error propagates.
         }
 

@@ -4,10 +4,9 @@ declare(strict_types=1);
 
 namespace Th3Mouk\MaterializedView\Tests\Unit\Privilege;
 
-use Doctrine\DBAL\Connection;
-use Doctrine\DBAL\Platforms\PostgreSQLPlatform;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
+use Th3Mouk\MaterializedView\Core\Database\Connection;
 use Th3Mouk\MaterializedView\Core\Definition\MaterializedViewName;
 use Th3Mouk\MaterializedView\Core\Privilege\GrantStatementGenerator;
 use Th3Mouk\MaterializedView\Core\Privilege\ObjectPrivilege;
@@ -48,7 +47,7 @@ final class PrivilegeReplayerTest extends TestCase
             ],
         );
 
-        $replayer = new PrivilegeReplayer($this->connection, new GrantStatementGenerator(IdentifierQuoter::forPlatform(new PostgreSQLPlatform())));
+        $replayer = new PrivilegeReplayer($this->connection, new GrantStatementGenerator(new IdentifierQuoter()));
 
         $count = $replayer->replay($snapshot);
 
@@ -66,7 +65,7 @@ final class PrivilegeReplayerTest extends TestCase
     {
         $snapshot = PrivilegeSnapshot::empty(MaterializedViewName::create('public', 'sales_by_category'));
 
-        $replayer = new PrivilegeReplayer($this->connection, new GrantStatementGenerator(IdentifierQuoter::forPlatform(new PostgreSQLPlatform())));
+        $replayer = new PrivilegeReplayer($this->connection, new GrantStatementGenerator(new IdentifierQuoter()));
 
         $count = $replayer->replay($snapshot);
 

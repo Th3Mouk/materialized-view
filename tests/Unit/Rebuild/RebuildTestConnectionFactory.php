@@ -5,30 +5,15 @@ declare(strict_types=1);
 namespace Th3Mouk\MaterializedView\Tests\Unit\Rebuild;
 
 use Closure;
-use Doctrine\DBAL\Connection;
-use Doctrine\DBAL\Platforms\PostgreSQLPlatform;
 use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
+use Th3Mouk\MaterializedView\Core\Database\Connection;
 
 final readonly class RebuildTestConnectionFactory
 {
     public static function create(TestCase $testCase): Connection&Stub
     {
-        $platform = new PostgreSQLPlatform();
-
-        $connection = self::mock($testCase);
-
-        $connection
-            ->method('getDatabasePlatform')
-            ->willReturn($platform);
-
-        $connection
-            ->method('quoteSingleIdentifier')
-            ->willReturnCallback(
-                static fn (string $identifier): string => $platform->quoteSingleIdentifier($identifier),
-            );
-
-        return $connection;
+        return self::mock($testCase);
     }
 
     /**
@@ -70,16 +55,7 @@ final readonly class RebuildTestConnectionFactory
     private static function mock(TestCase $testCase): Connection&Stub
     {
         $build = Closure::bind(
-            static fn (TestCase $case): Connection&Stub => $case->getStubBuilder(Connection::class)
-                ->disableOriginalConstructor()
-                ->onlyMethods([
-                    'getDatabasePlatform',
-                    'quoteSingleIdentifier',
-                    'fetchAllAssociative',
-                    'executeStatement',
-                    'transactional',
-                ])
-                ->getStub(),
+            static fn (TestCase $case): Connection&Stub => $case->getStubBuilder(Connection::class)->getStub(),
             null,
             TestCase::class,
         );

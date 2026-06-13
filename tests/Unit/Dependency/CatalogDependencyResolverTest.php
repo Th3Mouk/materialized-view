@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace Th3Mouk\MaterializedView\Tests\Unit\Dependency;
 
-use Doctrine\DBAL\Connection;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
+use Th3Mouk\MaterializedView\Core\Database\Connection;
 use Th3Mouk\MaterializedView\Core\Definition\MaterializedViewDefinition;
 use Th3Mouk\MaterializedView\Core\Dependency\CatalogDependencyResolver;
 use Th3Mouk\MaterializedView\Core\Registry\MaterializedViewRegistry;

@@ -11,6 +11,7 @@ use Doctrine\DBAL\Tools\DsnParser;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 use Th3Mouk\MaterializedView\Core\Lock\LaneLock;
+use Th3Mouk\MaterializedView\Dbal\DbalConnection;
 
 #[Group('lock')]
 #[Group('integration')]
@@ -52,8 +53,8 @@ final class LaneLockTest extends TestCase
      */
     public function testHeldLaneBlocksAnotherSession(): void
     {
-        $heldLane = new LaneLock($this->holder, self::LANE_NAMESPACE);
-        $contendingLane = new LaneLock($this->contender, self::LANE_NAMESPACE);
+        $heldLane = new LaneLock(new DbalConnection($this->holder), self::LANE_NAMESPACE);
+        $contendingLane = new LaneLock(new DbalConnection($this->contender), self::LANE_NAMESPACE);
 
         $heldLane->acquire();
 
@@ -76,7 +77,7 @@ final class LaneLockTest extends TestCase
      */
     public function testReleaseReportsWhetherLockWasHeld(): void
     {
-        $lane = new LaneLock($this->holder, self::LANE_NAMESPACE);
+        $lane = new LaneLock(new DbalConnection($this->holder), self::LANE_NAMESPACE);
 
         self::assertFalse($lane->release(), 'Releasing a lane lock never taken returns false.');
 

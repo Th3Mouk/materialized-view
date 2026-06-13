@@ -5,12 +5,10 @@ declare(strict_types=1);
 namespace Th3Mouk\MaterializedView\Tests\Unit\Support;
 
 use Closure;
-use Doctrine\DBAL\Connection;
-use Doctrine\DBAL\Driver\AbstractException as DriverAbstractException;
-use Doctrine\DBAL\Exception\DriverException;
-use Doctrine\DBAL\Platforms\PostgreSQLPlatform;
 use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
+use Th3Mouk\MaterializedView\Core\Database\Connection;
+use Th3Mouk\MaterializedView\Core\Database\DatabaseException;
 
 final readonly class FakeConnectionFactory
 {
@@ -34,32 +32,13 @@ final readonly class FakeConnectionFactory
         array $createFailureSqlStateByView = [],
         array $refreshFailureSqlStateByView = [],
     ): Connection&Stub {
-        $platform = new PostgreSQLPlatform();
-
         $buildConnection = Closure::bind(
-            static fn (TestCase $case): Connection&Stub => $case->getStubBuilder(Connection::class)
-                ->disableOriginalConstructor()
-                ->onlyMethods([
-                    'getDatabasePlatform',
-                    'quoteSingleIdentifier',
-                    'fetchAllAssociative',
-                    'fetchAssociative',
-                    'fetchOne',
-                    'executeStatement',
-                    'transactional',
-                ])
-                ->getStub(),
+            static fn (TestCase $case): Connection&Stub => $case->getStubBuilder(Connection::class)->getStub(),
             null,
             TestCase::class,
         );
 
         $connection = $buildConnection($testCase);
-
-        $connection->method('getDatabasePlatform')->willReturn($platform);
-
-        $connection
-            ->method('quoteSingleIdentifier')
-            ->willReturnCallback(static fn (string $identifier): string => $platform->quoteSingleIdentifier($identifier));
 
         $connection
             ->method('fetchAllAssociative')
@@ -125,7 +104,7 @@ final readonly class FakeConnectionFactory
                 if (str_contains($sql, 'CREATE MATERIALIZED VIEW')) {
                     foreach ($createFailureSqlStateByView as $view => $sqlState) {
                         if (str_contains($sql, self::quoteQualified($view))) {
-                            throw self::dbalDriverException($sqlState);
+                            throw new DatabaseException('relation does not exist', $sqlState);
                         }
                     }
                 }
@@ -133,7 +112,7 @@ final readonly class FakeConnectionFactory
                 if (str_contains($sql, 'REFRESH MATERIALIZED VIEW')) {
                     foreach ($refreshFailureSqlStateByView as $view => $sqlState) {
                         if (str_contains($sql, self::quoteQualified($view))) {
-                            throw self::dbalDriverException($sqlState);
+                            throw new DatabaseException('relation does not exist', $sqlState);
                         }
                     }
                 }
@@ -255,12 +234,5 @@ final readonly class FakeConnectionFactory
         [$schema, $name] = self::split($qualifiedName);
 
         return \sprintf('"%s"."%s"', $schema, $name);
-    }
-
-    private static function dbalDriverException(string $sqlState): DriverException
-    {
-        $driverException = new class('relation does not exist', $sqlState) extends DriverAbstractException {};
-
-        return new DriverException($driverException, null);
     }
 }

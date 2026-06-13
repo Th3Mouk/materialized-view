@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace Th3Mouk\MaterializedView\Core\Sync;
 
-use Doctrine\DBAL\Connection;
-use Doctrine\DBAL\Exception as DbalException;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
+use Th3Mouk\MaterializedView\Core\Database\Connection;
+use Th3Mouk\MaterializedView\Core\Database\DatabaseException;
 use Th3Mouk\MaterializedView\Core\Definition\MaterializedViewDefinition;
 use Th3Mouk\MaterializedView\Core\Definition\MaterializedViewName;
 use Th3Mouk\MaterializedView\Core\Definition\RebuildStrategy;
@@ -26,6 +26,7 @@ use Th3Mouk\MaterializedView\Core\Rebuild\RebuildContext;
 use Th3Mouk\MaterializedView\Core\Rebuild\Rebuilder;
 use Th3Mouk\MaterializedView\Core\Rebuild\SideBySideRebuilder;
 use Th3Mouk\MaterializedView\Core\Registry\MaterializedViewRegistry;
+use Th3Mouk\MaterializedView\Core\Sql\IdentifierQuoter;
 use Th3Mouk\MaterializedView\Core\Sql\ManagementMarker;
 use Th3Mouk\MaterializedView\Core\Sql\MissingDependencySqlState;
 use Th3Mouk\MaterializedView\Core\Sql\PostgreSqlMaterializedViewSqlGenerator;
@@ -46,6 +47,7 @@ final readonly class MaterializedViewSynchronizer
         private PostgreSqlMaterializedViewSqlGenerator $sqlGenerator,
         private PostgreSqlMaterializedViewIntrospector $introspector,
         private DefinitionHasher $hasher,
+        private IdentifierQuoter $quoter,
         ?LoggerInterface $logger = null,
     ) {
         $this->logger = $logger ?? new NullLogger();
@@ -100,7 +102,7 @@ final readonly class MaterializedViewSynchronizer
             try {
                 $this->buildView($definition, $registry, $graph, $privilegeSnapshots[$qualifiedName], $options);
                 $this->applyPopulationAndAnalyze($definition, $options);
-            } catch (DbalException $exception) {
+            } catch (DatabaseException $exception) {
                 if (!$this->shouldSkipMissingDependency($exception, $options)) {
                     $this->logger->error(
                         'Materialized view synchronisation aborted while building "{view}".',
@@ -162,7 +164,7 @@ final readonly class MaterializedViewSynchronizer
         return $outcome;
     }
 
-    private function shouldSkipMissingDependency(DbalException $exception, SyncOptions $options): bool
+    private function shouldSkipMissingDependency(DatabaseException $exception, SyncOptions $options): bool
     {
         return MissingDependencyPolicy::Skip === $options->missingDependencyPolicy
             && MissingDependencySqlState::isMissingDependency($exception);
@@ -447,8 +449,8 @@ final readonly class MaterializedViewSynchronizer
     {
         return \sprintf(
             'ANALYZE %s.%s',
-            $this->connection->quoteSingleIdentifier($name->schema),
-            $this->connection->quoteSingleIdentifier($name->name),
+            $this->quoter->quoteIdentifier($name->schema),
+            $this->quoter->quoteIdentifier($name->name),
         );
     }
 
@@ -456,8 +458,8 @@ final readonly class MaterializedViewSynchronizer
     {
         return \sprintf(
             'REFRESH MATERIALIZED VIEW %s.%s WITH DATA',
-            $this->connection->quoteSingleIdentifier($name->schema),
-            $this->connection->quoteSingleIdentifier($name->name),
+            $this->quoter->quoteIdentifier($name->schema),
+            $this->quoter->quoteIdentifier($name->name),
         );
     }
 
