@@ -1,6 +1,6 @@
 {
     "name": "th3mouk/materialized-view",
-    "description": "Declarative, PostgreSQL-native management of materialized views on top of Doctrine DBAL: define views as versioned SQL, synchronise, rebuild, refresh (concurrently) and read them safely.",
+    "description": "Declarative, PostgreSQL-native management of materialized views: define views as versioned SQL, synchronise, rebuild, refresh (concurrently) and read them safely. Runs on Doctrine DBAL or a bare PDO connection.",
     "type": "library",
     "keywords": [
         "postgresql",
@@ -9,6 +9,7 @@
         "matview",
         "doctrine",
         "dbal",
+        "pdo",
         "refresh",
         "analytics",
         "reporting",
@@ -24,17 +25,20 @@
     ],
     "require": {
         "php": ">=8.4",
-        "doctrine/dbal": "^4.4",
         "psr/log": "^3.0"
     },
     "require-dev": {
+        "doctrine/dbal": "^4.4",
         "doctrine/orm": "^3.6",
+        "ext-pdo": "*",
         "phpunit/phpunit": "^13.0",
         "phpstan/phpstan": "^2.1",
         "friendsofphp/php-cs-fixer": "^3.64",
         "rector/rector": "^2.0"
     },
     "suggest": {
+        "doctrine/dbal": "To wire the manager with MaterializedViewManager::forConnection() and keep DBAL's primary/replica routing, middlewares and profiling.",
+        "ext-pdo_pgsql": "To run on a bare PDO connection (no Doctrine) via MaterializedViewManager::forPdo().",
         "doctrine/orm": "To map a materialized view as a read-only entity via Th3Mouk\\MaterializedView\\DoctrineOrm.",
         "th3mouk/materialized-view-bundle": "Symfony integration: autoconfiguration, console commands and the locked deploy lane."
     },
@@ -50,7 +54,7 @@
     },
     "extra": {
         "branch-alias": {
-            "dev-main": "1.2.x-dev"
+            "dev-main": "1.3.x-dev"
         }
     },
     "config": {

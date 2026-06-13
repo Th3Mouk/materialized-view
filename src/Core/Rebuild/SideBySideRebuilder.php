@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace Th3Mouk\MaterializedView\Core\Rebuild;
 
-use Doctrine\DBAL\Connection;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
+use Th3Mouk\MaterializedView\Core\Database\Connection;
 use Th3Mouk\MaterializedView\Core\Definition\MaterializedViewDefinition;
 use Th3Mouk\MaterializedView\Core\Definition\MaterializedViewName;
 use Th3Mouk\MaterializedView\Core\Definition\RebuildStrategy;
@@ -24,7 +24,7 @@ final readonly class SideBySideRebuilder implements Rebuilder
         private string $swapToken,
         ?LoggerInterface $logger = null,
     ) {
-        $this->statements = new RebuildStatementFactory(IdentifierQuoter::forConnection($connection));
+        $this->statements = new RebuildStatementFactory(new IdentifierQuoter());
         $this->logger = $logger ?? new NullLogger();
     }
 

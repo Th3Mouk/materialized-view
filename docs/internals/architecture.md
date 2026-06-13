@@ -6,11 +6,13 @@ This page maps the design to the source tree and shows the main data flows. It i
 
 ```text
 th3mouk/materialized-view
-├── src/Core         # framework-free; depends only on doctrine/dbal
+├── src/Core         # framework-free; talks to PostgreSQL only through Core\Database\Connection (no Doctrine)
+├── src/Dbal         # optional adapter; wraps a Doctrine DBAL connection
+├── src/Pdo          # optional adapter; wraps a bare PDO handle (pdo_pgsql)
 └── src/DoctrineOrm  # optional; depends on doctrine/orm (read-only mapping)
 ```
 
-Hard rule: **`src/Core` must never import Symfony or Doctrine ORM.** Symfony integration is a separate package (`th3mouk/materialized-view-bundle`). The ORM read layer is isolated in `src/DoctrineOrm` and only loaded when `doctrine/orm` is present.
+Hard rule: **the `src/Core` engine talks to PostgreSQL only through the `Core\Database\Connection` port and never imports Symfony or Doctrine ORM.** The DBAL and PDO adapters live in `src/Dbal` / `src/Pdo`; the ORM read layer is isolated in `src/DoctrineOrm` (loaded only when `doctrine/orm` is present); Symfony integration is a separate package (`th3mouk/materialized-view-bundle`). The only DBAL names remaining in `Core` are the `MaterializedViewManager::forConnection()` BC convenience and the `RefreshTargetResolver` async-refresh contract — neither is loaded on the PDO path.
 
 ## Class map (folder → planned classes)
 
@@ -20,7 +22,8 @@ Hard rule: **`src/Core` must never import Symfony or Doctrine ORM.** Symfony int
 |---|---|---|
 | `Core/Definition` | `MaterializedViewDefinition`, `MaterializedViewName`, `SqlSource` (iface), `SqlFileSource`, `InlineSqlSource`, `MaterializedViewIndex`, `PopulationPolicy` (enum), `RebuildStrategy` (enum), `RefreshOptions` | Immutable declaration of a view |
 | `Core/Registry` | `MaterializedViewRegistry` | Typed collection of declared definitions |
-| `Core/Sql` | `PostgreSqlMaterializedViewSqlGenerator`, `IdentifierQuoter` | Generates `CREATE`/`DROP`/`REFRESH`/`CREATE INDEX`/`COMMENT`/`ALTER … RENAME`; structured quoting |
+| `Core/Database` | `Connection` (iface), `ParameterType` (enum), `DatabaseException` | The execution port the engine runs on; backend-agnostic binding types and failures (carries SQLSTATE) |
+| `Core/Sql` | `PostgreSqlMaterializedViewSqlGenerator`, `IdentifierQuoter` | Generates `CREATE`/`DROP`/`REFRESH`/`CREATE INDEX`/`COMMENT`/`ALTER … RENAME`; PostgreSQL-native quoting (no DBAL platform) |
 | `Core/Introspection` | `PostgreSqlMaterializedViewIntrospector`, `ReadinessChecker` | Reads `pg_matviews`/`pg_class`/`pg_namespace`/`pg_indexes`, comments, `relispopulated` |
 | `Core/Dependency` | `CatalogDependencyResolver`, `ExternalDependencyGuard` | Derives the matview graph from `pg_depend`/`pg_rewrite`; blocks unsafe drops |
 | `Core/Rebuild` | `SideBySideRebuilder`, `IndexSnapshotter` | Rebuild strategies; index capture/replay |
@@ -31,7 +34,9 @@ Hard rule: **`src/Core` must never import Symfony or Doctrine ORM.** Symfony int
 | `Core/Sync` | `MaterializedViewSynchronizer`, `MaterializedViewComparator` | The declarative reconcile engine |
 | `Core/Migration` | `MaterializedViewMigrationSql` | Static helper for migration-owned mode |
 | `Core/Exception` | domain exceptions | Named, business-meaningful failures |
-| `Core` (root) | `MaterializedViewManager` | Runtime façade: `create()/drop()/refresh()/sync()/refreshAll()` |
+| `Core` (root) | `MaterializedViewManager` | Runtime façade: `create()/drop()/refresh()/sync()/refreshAll()`; factories `forDriver()` (port), `forConnection()` (DBAL), `forPdo()` (PDO) |
+| `Dbal` | `DbalConnection` | `Connection` adapter over Doctrine DBAL — primary/replica routing, middlewares, profiling |
+| `Pdo` | `PdoConnection` | `Connection` adapter over a bare `PDO` handle (`pdo_pgsql`) |
 | `DoctrineOrm/Mapping` | `#[MaterializedViewEntity]`, `MaterializedViewMetadataReader` | Link entity ↔ definition |
 | `DoctrineOrm/Listener` | `MaterializedViewWriteGuard`, `MaterializedViewPostLoadListener` | Enforce read-only |
 | `DoctrineOrm/Repository` | `MaterializedViewRepository` | Read-only base repository |
@@ -39,15 +44,24 @@ Hard rule: **`src/Core` must never import Symfony or Doctrine ORM.** Symfony int
 
 ## Construction (framework-agnostic)
 
+The manager runs on any `Core\Database\Connection`. Two adapters ship with the package; pick a backend:
+
 ```php
 use Doctrine\DBAL\DriverManager;
 use Th3Mouk\MaterializedView\Core\MaterializedViewManager;
 
+// Doctrine DBAL — keeps primary/replica routing, middlewares, profiling:
 $connection = DriverManager::getConnection(['url' => $databaseUrl]);
 $manager    = MaterializedViewManager::forConnection($connection /*, LoggerInterface $logger = null */);
+
+// …or a bare PDO handle (pdo_pgsql), no Doctrine:
+$manager = MaterializedViewManager::forPdo(new PDO($dsn, $user, $password));
+
+// …or any custom Connection adapter:
+$manager = MaterializedViewManager::forDriver($connection);
 ```
 
-The bundle wires this as a service per connection.
+`forConnection()` and `forPdo()` are thin wrappers over `forDriver()` that build a `Dbal\DbalConnection` / `Pdo\PdoConnection`. See [Connection backends](../guide/connection-backends.md). The bundle wires this as a service per connection.
 
 ## Data flow — `sync`
 

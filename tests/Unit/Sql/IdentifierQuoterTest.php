@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Th3Mouk\MaterializedView\Tests\Unit\Sql;
 
-use Doctrine\DBAL\Platforms\PostgreSQLPlatform;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 use Th3Mouk\MaterializedView\Core\Definition\MaterializedViewName;
@@ -17,7 +16,7 @@ final class IdentifierQuoterTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->quoter = IdentifierQuoter::forPlatform(new PostgreSQLPlatform());
+        $this->quoter = new IdentifierQuoter();
     }
 
     public function testQuotesSimpleIdentifier(): void

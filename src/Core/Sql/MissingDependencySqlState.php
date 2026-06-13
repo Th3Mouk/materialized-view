@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Th3Mouk\MaterializedView\Core\Sql;
 
-use Doctrine\DBAL\Driver\Exception as DriverException;
+use Th3Mouk\MaterializedView\Core\Database\DatabaseException;
 use Throwable;
 
 final readonly class MissingDependencySqlState
@@ -23,12 +23,8 @@ final readonly class MissingDependencySqlState
     private static function resolveSqlState(Throwable $throwable): ?string
     {
         for ($current = $throwable; null !== $current; $current = $current->getPrevious()) {
-            if ($current instanceof DriverException) {
-                $sqlState = $current->getSQLState();
-
-                if (null !== $sqlState) {
-                    return $sqlState;
-                }
+            if ($current instanceof DatabaseException && null !== $current->sqlState()) {
+                return $current->sqlState();
             }
         }
 

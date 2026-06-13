@@ -4,9 +4,8 @@ declare(strict_types=1);
 
 namespace Th3Mouk\MaterializedView\Core\Lock;
 
-use Doctrine\DBAL\Connection;
-use Doctrine\DBAL\Connections\PrimaryReadReplicaConnection;
-use Doctrine\DBAL\Exception;
+use Th3Mouk\MaterializedView\Core\Database\Connection;
+use Th3Mouk\MaterializedView\Core\Database\DatabaseException;
 
 final readonly class PrimaryConnectionGuard
 {
@@ -16,14 +15,15 @@ final readonly class PrimaryConnectionGuard
     }
 
     /**
-     * @throws Exception
+     * Pins subsequent statements to the primary before any DDL or refresh.
+     *
+     * The connection decides what this means: a Doctrine primary/replica
+     * connection switches to the primary, a bare PDO handle does nothing.
+     *
+     * @throws DatabaseException
      */
     public function ensureConnectedToPrimary(): void
     {
-        if (!$this->connection instanceof PrimaryReadReplicaConnection) {
-            return;
-        }
-
         $this->connection->ensureConnectedToPrimary();
     }
 }
