@@ -13,6 +13,7 @@ use Th3Mouk\MaterializedView\Core\Definition\MaterializedViewDefinition;
 use Th3Mouk\MaterializedView\Core\Definition\MaterializedViewIndex;
 use Th3Mouk\MaterializedView\Core\Definition\MaterializedViewName;
 use Th3Mouk\MaterializedView\Core\Dependency\DropDependentPolicy;
+use Th3Mouk\MaterializedView\Core\Exception\ConcurrentRefreshUnsupported;
 use Th3Mouk\MaterializedView\Core\Exception\MissingUniqueIndexForConcurrentRefresh;
 use Th3Mouk\MaterializedView\Core\Exception\UnmanagedDependentFound;
 use Th3Mouk\MaterializedView\Core\Exception\ViewNotPopulated;
@@ -362,6 +363,118 @@ final class MaterializedViewManagerTest extends TestCase
             static fn (array $record): bool => str_contains($record['message'], 'refresh-all completed'),
         ));
         self::assertCount(0, $completed);
+    }
+
+    public function testRefreshOnlyUnpopulatedRefreshesAnUnpopulatedView(): void
+    {
+        $executed = [];
+        $manager = MaterializedViewManager::forDriver(
+            FakeConnectionFactory::create(
+                $this,
+                ['public' => [FakeConnectionFactory::matviewRow('public', 'summary', null, isPopulated: false)]],
+                executed: $executed,
+            ),
+        );
+
+        $outcome = $manager->refresh($this->definition(), RefreshOptions::default()->withOnlyUnpopulated());
+
+        self::assertSame(['public.summary'], $outcome->refreshed);
+        self::assertContains('REFRESH MATERIALIZED VIEW "public"."summary"', $executed);
+    }
+
+    public function testRefreshOnlyUnpopulatedSkipsAPopulatedViewAndLogsIt(): void
+    {
+        $executed = [];
+        $logger = new CollectingLogger();
+        $manager = MaterializedViewManager::forDriver(
+            FakeConnectionFactory::create(
+                $this,
+                ['public' => [FakeConnectionFactory::matviewRow('public', 'summary', null)]],
+                executed: $executed,
+            ),
+            $logger,
+        );
+
+        $outcome = $manager->refresh($this->definition(), RefreshOptions::default()->withOnlyUnpopulated());
+
+        self::assertSame(['public.summary'], $outcome->skippedPopulated);
+        self::assertSame([], $outcome->refreshed);
+        self::assertSame([], array_values(array_filter(
+            $executed,
+            static fn (string $statement): bool => str_starts_with($statement, 'REFRESH') || str_starts_with($statement, 'ANALYZE'),
+        )));
+
+        $skipped = $logger->recordsAtLevel(LogLevel::INFO);
+        self::assertCount(1, $skipped);
+        self::assertSame('public.summary', $skipped[0]['context']['view'] ?? null);
+    }
+
+    public function testRefreshOnlyUnpopulatedSkipsAnAbsentView(): void
+    {
+        $executed = [];
+        $manager = MaterializedViewManager::forDriver(
+            FakeConnectionFactory::create($this, [], [], $executed),
+        );
+
+        $outcome = $manager->refresh($this->definition(), RefreshOptions::default()->withOnlyUnpopulated());
+
+        self::assertSame(['public.summary'], $outcome->skippedMissing);
+        self::assertNotContains('REFRESH MATERIALIZED VIEW "public"."summary"', $executed);
+    }
+
+    public function testOnlyUnpopulatedCannotBeCombinedWithConcurrently(): void
+    {
+        $executed = [];
+        $manager = MaterializedViewManager::forDriver(
+            FakeConnectionFactory::create($this, [], [], $executed),
+        );
+
+        try {
+            $manager->refreshAll(
+                MaterializedViewRegistry::fromDefinitions([$this->definition()]),
+                RefreshOptions::concurrent()->withOnlyUnpopulated(),
+            );
+            self::fail('Expected the combination to be refused.');
+        } catch (ConcurrentRefreshUnsupported) {
+            self::assertSame([], $executed);
+        }
+    }
+
+    public function testRefreshAllOnlyUnpopulatedRefreshesTheUnpopulatedViewsInDependencyOrder(): void
+    {
+        $executed = [];
+        $manager = MaterializedViewManager::forDriver(
+            FakeConnectionFactory::create(
+                $this,
+                ['public' => [
+                    FakeConnectionFactory::matviewRow('public', 'base', null),
+                    FakeConnectionFactory::matviewRow('public', 'rollup', null, isPopulated: false),
+                ]],
+                executed: $executed,
+                dependencyEdges: [FakeConnectionFactory::dependencyEdge('public.rollup', 'public.base')],
+            ),
+        );
+
+        $outcome = $manager->refreshAll(
+            MaterializedViewRegistry::fromDefinitions([$this->rollupDefinition(), $this->baseDefinition()]),
+            RefreshOptions::default()->withOnlyUnpopulated(),
+        );
+
+        self::assertSame(['public.rollup'], $outcome->refreshed);
+        self::assertSame(['public.base'], $outcome->skippedPopulated);
+    }
+
+    public function testRefreshAllWithoutTheOptionRefreshesEveryViewAndSkipsNone(): void
+    {
+        $executed = [];
+        $manager = MaterializedViewManager::forDriver(
+            FakeConnectionFactory::create($this, executed: $executed),
+        );
+
+        $outcome = $manager->refreshAll(MaterializedViewRegistry::fromDefinitions([$this->baseDefinition()]));
+
+        self::assertSame(['public.base'], $outcome->refreshed);
+        self::assertSame(0, $outcome->skippedCount());
     }
 
     private function definition(): MaterializedViewDefinition
