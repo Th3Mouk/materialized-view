@@ -16,6 +16,7 @@ The authoritative test matrix. Every scenario here must be covered before a rele
 - `AsyncRefreshRequest` carries the target database identity.
 - `Async` refuses a per-connection Doctrine transport when no shared transport is configured.
 - `ExternalDependencyGuard` blocks drops/rebuilds/prunes that have unmanaged dependents.
+- `DependencySafeStatement` accepts only the allowlisted statement families (comments, case, whitespace and trailing semicolons tolerated) and rejects any other statement, several statements in one string, dollar quoting, backslashes in strings and unterminated comments or quotes; on PostgreSQL each allowlisted family runs against a table with a dependent materialized view while a column type change raises the dependency conflict.
 - `StableLockKeyGenerator` is deterministic across PHP platforms and never calls PostgreSQL.
 - `MigrationImpactResolver` (optional) can target a closure but is not the default.
 - `matview:generate` workflow in both `stable` and `versioned` (bump) naming.

@@ -56,7 +56,7 @@ The library never string-concatenates user values into SQL; identifiers and lite
 - Pending-migration detection uses `getMigrationStatusCalculator()->getNewMigrations()` (the same logic as `migrations:up-to-date`).
 - *Verified in vendor `doctrine/migrations/src`: `DependencyFactory::getMigrator()` (l.403), `getConsoleInputMigratorConfigurationFactory()` (l.384), `getMigrationPlanCalculator()` (l.362), `Migrator::migrate(MigrationPlanList, MigratorConfiguration)`; bundle service id `doctrine.migrations.dependency_factory` (`config/services.php`).*
 
-> ⚠️ **Doctrine Migrations exposes no reliable API for the tables a pending migration will touch** — migrations are arbitrary `addSql()`. This is why `drop --if-pending` is conservative (drop-all) at MVP and a targeted drop is a future, application-supplied `MigrationImpactResolver` (or a reactive catch-and-retry). See the [bundle boot lane](../../../materialized-view-bundle/docs/guide/boot-lane.md).
+> ⚠️ **Doctrine Migrations exposes no reliable API for the tables a pending migration will touch** — migrations are arbitrary `addSql()`. This is why `drop --if-pending` is conservative (drop-all) at MVP and a targeted drop is a future, application-supplied `MigrationImpactResolver` (or a reactive catch-and-retry). The only SQL a consumer can obtain reliably is the planned statements of a dry run, which `DependencySafeStatement` classifies. See the [bundle boot lane](../../../materialized-view-bundle/docs/guide/boot-lane.md).
 
 ## Symfony
 

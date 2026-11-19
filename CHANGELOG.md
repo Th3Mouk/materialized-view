@@ -5,6 +5,19 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **`Core\Dependency\DependencySafeStatement`** — a pure, framework-agnostic allowlist
+  telling whether a single SQL statement can never be blocked by a view depending on the
+  relation it touches (SQLSTATE `2BP01` / `0A000`): `CREATE [UNIQUE] INDEX`, `DROP INDEX`,
+  `REINDEX`, `ALTER TABLE … VALIDATE CONSTRAINT` (that action alone), `ANALYZE` and
+  `VACUUM`. `isSafe()` classifies one statement and `areAllSafe()` a list. Comments,
+  whitespace, letter case and trailing semicolons are tolerated; anything else, several
+  statements in one string, or text it cannot read with certainty is not safe. It lets a
+  deploy tool keep its drop-all fallback only for migrations that can actually conflict.
+  See [Dependencies & refresh order](docs/guide/dependencies-and-ordering.md).
+
 ## [1.3.0]
 
 ### Added

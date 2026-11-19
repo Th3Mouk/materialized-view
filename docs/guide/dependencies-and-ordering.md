@@ -47,3 +47,15 @@ A targeted rebuild **refuses** if it detects **unmanaged** dependents it cannot 
 - a future extension toward external refresh jobs.
 
 It must **not** be the primary mechanism for ordering refreshes between materialized views — the catalog already knows those.
+
+## Statements that cannot conflict
+
+Some SQL can never be blocked by a view depending on the relation it touches: `CREATE [UNIQUE] INDEX`, `DROP INDEX`, `REINDEX`, `ALTER TABLE … VALIDATE CONSTRAINT`, `ANALYZE` and `VACUUM`. `DependencySafeStatement::isSafe()` answers whether a statement belongs to that allowlist, so a deploy tool can leave the managed views alone for a migration made only of such statements and keep its blunt fallback for everything else. The check is conservative: any other statement, several statements in one string, or text it cannot read with certainty is **not** safe.
+
+```php
+use Th3Mouk\MaterializedView\Core\Dependency\DependencySafeStatement;
+
+DependencySafeStatement::isSafe('CREATE INDEX CONCURRENTLY idx ON orders (total)'); // true
+DependencySafeStatement::isSafe('ALTER TABLE orders DROP COLUMN total');            // false
+DependencySafeStatement::areAllSafe($statements);                                   // every statement is safe
+```
