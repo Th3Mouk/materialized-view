@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-11-19
+
 ### Added
 - **`Core\Dependency\DependencySafeStatement`** — a pure, framework-agnostic allowlist
   telling whether a single SQL statement can never be blocked by a view depending on the
@@ -18,7 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   deploy tool keep its drop-all fallback only for migrations that can actually conflict.
   See [Dependencies & refresh order](docs/guide/dependencies-and-ordering.md).
 
-## [1.3.0]
+## [1.3.0] - 2026-06-15
 
 ### Added
 - **Doctrine DBAL is now optional — the core runs on any connection backend.**
@@ -146,7 +148,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   doubles configured without expectations use `createStub()` / `getStubBuilder()`
   as required by PHPUnit 13.
 
-[1.3.0]: https://github.com/Th3Mouk/materialized-view/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/Th3Mouk/materialized-view/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/Th3Mouk/materialized-view/compare/v1.3.0...v1.4.0
+[1.3.0]: https://github.com/Th3Mouk/materialized-view/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/Th3Mouk/materialized-view/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/Th3Mouk/materialized-view/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/Th3Mouk/materialized-view/releases/tag/v1.0.0
