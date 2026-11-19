@@ -92,6 +92,19 @@ When a schema migration tries to `DROP TABLE`/`DROP COLUMN` or `ALTER COLUMN …
 
 `PostgresDependencyConflict` parses the error best-effort (the `DETAIL` list is capped at 100 entries — "and N other objects" — so it is only ever a *seed*). The authoritative closure is always resolved from the catalog by `CatalogDependencyResolver::resolveConflictClosure()`: it resolves the seed once via **`to_regclass`** and then walks `pg_depend` → `pg_rewrite` by OID. Unlike the managed-graph query above, this walk seeds from an **arbitrary relation** (typically a plain table, `relkind 'r'`, which is *not* a node in the managed graph) and classifies each dependent as managed (matview carrying the `ManagementMarker` comment) or unmanaged. The precise blockers are the `DETAIL` dependents (the views actually using the column), so the consumer seeds the closure from each of them; the blocked-table walk is the fallback when `DETAIL` is unparsable. `MaterializedViewManager::dropConflictClosure()` drops the managed closure in dependents-first order and refuses (`UnmanagedDependentFound`) if any unmanaged dependent is present.
 
+### Dependency-safe statements
+
+`DependencySafeStatement` is a pure allowlist of the statements that never raise `2BP01`/`0A000`, so a consumer can tell a migration that may need a managed view dropped from one that cannot. None of them drops, retypes or renames a column or relation that a view reads; they only build, drop or rebuild an index, flip a constraint to validated, or gather statistics and reclaim space. `tests/Integration/Dependency/DependencySafeStatementIntegrationTest.php` runs each family against a table with a dependent materialized view, next to a control `ALTER COLUMN … TYPE` that does raise the conflict.
+
+- **`CREATE [UNIQUE] INDEX`** — <https://www.postgresql.org/docs/17/sql-createindex.html> — `CONCURRENTLY` and `IF NOT EXISTS` are part of the same statement.
+- **`DROP INDEX`** — <https://www.postgresql.org/docs/17/sql-dropindex.html>
+- **`REINDEX`** — <https://www.postgresql.org/docs/17/sql-reindex.html>
+- **`ALTER TABLE … VALIDATE CONSTRAINT`** — <https://www.postgresql.org/docs/17/sql-altertable.html> — only this single action; every other `ALTER TABLE` action is outside the allowlist, `ALTER COLUMN … TYPE` being the `0A000` case above. The grammar puts `IF EXISTS` before `ONLY`; both orders are accepted.
+- **`ANALYZE`** — <https://www.postgresql.org/docs/17/sql-analyze.html> (`ANALYSE` is the same command).
+- **`VACUUM`** — <https://www.postgresql.org/docs/17/sql-vacuum.html>
+
+The scanner is deliberately conservative: it tolerates comments (`--` and nested `/* */`), whitespace, letter case and trailing semicolons, and treats as not safe more than one statement in a string, dollar-quoted text, a backslash inside a string literal, or an unterminated comment or quote.
+
 ## Privileges & comments
 
 - **GRANT** — <https://www.postgresql.org/docs/17/sql-grant.html> — dropping an object removes its privileges; a rebuild must re-apply them. See [Privileges](../guide/privileges.md).

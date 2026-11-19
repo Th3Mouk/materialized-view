@@ -25,7 +25,7 @@ Hard rule: **the `src/Core` engine talks to PostgreSQL only through the `Core\Da
 | `Core/Database` | `Connection` (iface), `ParameterType` (enum), `DatabaseException` | The execution port the engine runs on; backend-agnostic binding types and failures (carries SQLSTATE) |
 | `Core/Sql` | `PostgreSqlMaterializedViewSqlGenerator`, `IdentifierQuoter` | Generates `CREATE`/`DROP`/`REFRESH`/`CREATE INDEX`/`COMMENT`/`ALTER … RENAME`; PostgreSQL-native quoting (no DBAL platform) |
 | `Core/Introspection` | `PostgreSqlMaterializedViewIntrospector`, `ReadinessChecker` | Reads `pg_matviews`/`pg_class`/`pg_namespace`/`pg_indexes`, comments, `relispopulated` |
-| `Core/Dependency` | `CatalogDependencyResolver`, `ExternalDependencyGuard` | Derives the matview graph from `pg_depend`/`pg_rewrite`; blocks unsafe drops |
+| `Core/Dependency` | `CatalogDependencyResolver`, `ExternalDependencyGuard`, `DependencySafeStatement` | Derives the matview graph from `pg_depend`/`pg_rewrite`; blocks unsafe drops; classifies the SQL statements that can never raise a dependency conflict |
 | `Core/Rebuild` | `SideBySideRebuilder`, `IndexSnapshotter` | Rebuild strategies; index capture/replay |
 | `Core/Privilege` | `PrivilegeSnapshotter`, `PrivilegeReplayer` | GRANT capture/replay across rebuilds |
 | `Core/Refresh` | `RefreshOptions`, `AsyncRefreshRequest`, `RefreshTargetResolver` (iface) | Refresh request model; refresh target resolution contract (enumerates the databases/connections to refresh) |
