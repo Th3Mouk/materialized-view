@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-11-19
+
 ### Added
 - **`RefreshOptions::withOnlyUnpopulated()`** — `MaterializedViewManager::refresh()` and
   `refreshAll()` can refresh only the views that exist and are unpopulated
@@ -162,7 +164,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   doubles configured without expectations use `createStub()` / `getStubBuilder()`
   as required by PHPUnit 13.
 
-[Unreleased]: https://github.com/Th3Mouk/materialized-view/compare/v1.4.0...HEAD
+[Unreleased]: https://github.com/Th3Mouk/materialized-view/compare/v1.5.0...HEAD
+[1.5.0]: https://github.com/Th3Mouk/materialized-view/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/Th3Mouk/materialized-view/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/Th3Mouk/materialized-view/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/Th3Mouk/materialized-view/compare/v1.1.0...v1.2.0
