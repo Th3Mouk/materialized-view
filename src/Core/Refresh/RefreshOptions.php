@@ -12,6 +12,7 @@ final readonly class RefreshOptions
         public bool $analyzeAfterRefresh,
         public ?string $lockTimeout,
         public ?string $statementTimeout,
+        public bool $onlyUnpopulated,
     ) {
     }
 
@@ -23,6 +24,7 @@ final readonly class RefreshOptions
             analyzeAfterRefresh: true,
             lockTimeout: null,
             statementTimeout: null,
+            onlyUnpopulated: false,
         );
     }
 
@@ -39,6 +41,7 @@ final readonly class RefreshOptions
             analyzeAfterRefresh: $this->analyzeAfterRefresh,
             lockTimeout: $this->lockTimeout,
             statementTimeout: $this->statementTimeout,
+            onlyUnpopulated: $this->onlyUnpopulated,
         );
     }
 
@@ -50,6 +53,7 @@ final readonly class RefreshOptions
             analyzeAfterRefresh: $this->analyzeAfterRefresh,
             lockTimeout: $this->lockTimeout,
             statementTimeout: $this->statementTimeout,
+            onlyUnpopulated: $this->onlyUnpopulated,
         );
     }
 
@@ -66,6 +70,7 @@ final readonly class RefreshOptions
             analyzeAfterRefresh: $analyzeAfterRefresh,
             lockTimeout: $this->lockTimeout,
             statementTimeout: $this->statementTimeout,
+            onlyUnpopulated: $this->onlyUnpopulated,
         );
     }
 
@@ -77,6 +82,7 @@ final readonly class RefreshOptions
             analyzeAfterRefresh: $this->analyzeAfterRefresh,
             lockTimeout: $lockTimeout,
             statementTimeout: $this->statementTimeout,
+            onlyUnpopulated: $this->onlyUnpopulated,
         );
     }
 
@@ -88,6 +94,19 @@ final readonly class RefreshOptions
             analyzeAfterRefresh: $this->analyzeAfterRefresh,
             lockTimeout: $this->lockTimeout,
             statementTimeout: $statementTimeout,
+            onlyUnpopulated: $this->onlyUnpopulated,
+        );
+    }
+
+    public function withOnlyUnpopulated(bool $onlyUnpopulated = true): self
+    {
+        return new self(
+            concurrently: $this->concurrently,
+            withData: $this->withData,
+            analyzeAfterRefresh: $this->analyzeAfterRefresh,
+            lockTimeout: $this->lockTimeout,
+            statementTimeout: $this->statementTimeout,
+            onlyUnpopulated: $onlyUnpopulated,
         );
     }
 }

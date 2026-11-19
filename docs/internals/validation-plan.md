@@ -17,6 +17,7 @@ The authoritative test matrix. Every scenario here must be covered before a rele
 - `Async` refuses a per-connection Doctrine transport when no shared transport is configured.
 - `ExternalDependencyGuard` blocks drops/rebuilds/prunes that have unmanaged dependents.
 - `DependencySafeStatement` accepts only the allowlisted statement families (comments, case, whitespace and trailing semicolons tolerated) and rejects any other statement, several statements in one string, dollar quoting, backslashes in strings and unterminated comments or quotes; on PostgreSQL each allowlisted family runs against a table with a dependent materialized view while a column type change raises the dependency conflict.
+- `refresh()` / `refreshAll()` with `RefreshOptions::withOnlyUnpopulated()` refresh an unpopulated view, skip a populated or absent one (logged and reported in `RefreshOutcome`), and refuse the combination with `CONCURRENTLY` before any statement.
 - `StableLockKeyGenerator` is deterministic across PHP platforms and never calls PostgreSQL.
 - `MigrationImpactResolver` (optional) can target a closure but is not the default.
 - `matview:generate` workflow in both `stable` and `versioned` (bump) naming.
@@ -28,6 +29,7 @@ The authoritative test matrix. Every scenario here must be covered before a rele
 - Refuse `REFRESH … CONCURRENTLY` without a unique index.
 - Refuse `REFRESH … CONCURRENTLY` on an unpopulated view.
 - First non-concurrent refresh, then a concurrent refresh.
+- Refresh only unpopulated views: dependency order kept, populated views left untouched, a second run refreshes nothing, an absent view skipped (and still an error without the option).
 - Read and write the hash in the COMMENT.
 - Derive matview → matview ordering from the catalog, **including through a plain-view intermediate**.
 - Confirm the `pg_depend` query ignores the `_RETURN` internal dependency and produces no self-loop.

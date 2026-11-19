@@ -16,6 +16,7 @@ use Th3Mouk\MaterializedView\Core\Dependency\ConflictDropClosure;
 use Th3Mouk\MaterializedView\Core\Dependency\DropDependentPolicy;
 use Th3Mouk\MaterializedView\Core\Dependency\ExternalDependencyGuard;
 use Th3Mouk\MaterializedView\Core\Dependency\PostgresDependencyConflict;
+use Th3Mouk\MaterializedView\Core\Exception\ConcurrentRefreshUnsupported;
 use Th3Mouk\MaterializedView\Core\Exception\MissingUniqueIndexForConcurrentRefresh;
 use Th3Mouk\MaterializedView\Core\Exception\UnmanagedDependentFound;
 use Th3Mouk\MaterializedView\Core\Exception\ViewNotPopulated;
@@ -30,6 +31,7 @@ use Th3Mouk\MaterializedView\Core\Privilege\PrivilegeSnapshotter;
 use Th3Mouk\MaterializedView\Core\Rebuild\DropCreateRebuilder;
 use Th3Mouk\MaterializedView\Core\Rebuild\RebuildContext;
 use Th3Mouk\MaterializedView\Core\Refresh\RefreshOptions;
+use Th3Mouk\MaterializedView\Core\Refresh\RefreshOutcome;
 use Th3Mouk\MaterializedView\Core\Registry\MaterializedViewRegistry;
 use Th3Mouk\MaterializedView\Core\Sql\IdentifierQuoter;
 use Th3Mouk\MaterializedView\Core\Sql\ManagementMarker;
@@ -261,17 +263,33 @@ final readonly class MaterializedViewManager
         return $resolver->resolveConflictClosure($blockedRelation);
     }
 
-    public function refresh(MaterializedViewDefinition $definition, ?RefreshOptions $options = null): void
+    /**
+     * With {@see RefreshOptions::withOnlyUnpopulated()}, refreshes the view only when it
+     * exists and is unpopulated; the check runs under the refresh lock, so a refresh that
+     * completed meanwhile is not repeated.
+     *
+     * @throws ConcurrentRefreshUnsupported when combined with a concurrent refresh
+     */
+    public function refresh(MaterializedViewDefinition $definition, ?RefreshOptions $options = null): RefreshOutcome
     {
         $options ??= RefreshOptions::default();
         $name = $definition->name();
 
+        $this->assertOnlyUnpopulatedSupported($options);
         $this->primaryConnectionGuard->ensureConnectedToPrimary();
         $this->applyTimeouts($options);
 
         $this->refreshLock->acquire($name);
 
         try {
+            if ($options->onlyUnpopulated) {
+                $skipped = $this->skipUnlessUnpopulated($name);
+
+                if (null !== $skipped) {
+                    return $skipped;
+                }
+            }
+
             if ($options->concurrently) {
                 $this->assertConcurrentlySupported($definition);
             }
@@ -296,6 +314,8 @@ final readonly class MaterializedViewManager
                 'concurrently' => $options->concurrently,
                 'duration_ms' => intdiv(hrtime(true) - $startedAtNanoseconds, 1_000_000),
             ]);
+
+            return RefreshOutcome::of(refreshed: [$name->qualifiedName()]);
         } finally {
             $this->refreshLock->release($name);
             $this->resetTimeouts($options);
@@ -318,8 +338,17 @@ final readonly class MaterializedViewManager
         return $outcome;
     }
 
-    public function refreshAll(MaterializedViewRegistry $registry, ?RefreshOptions $options = null): void
+    /**
+     * Refreshes every view of the registry in catalog dependency order. With
+     * {@see RefreshOptions::withOnlyUnpopulated()}, views that are populated or absent are skipped.
+     *
+     * @throws ConcurrentRefreshUnsupported when combined with a concurrent refresh
+     */
+    public function refreshAll(MaterializedViewRegistry $registry, ?RefreshOptions $options = null): RefreshOutcome
     {
+        $options ??= RefreshOptions::default();
+
+        $this->assertOnlyUnpopulatedSupported($options);
         $this->primaryConnectionGuard->ensureConnectedToPrimary();
 
         $resolver = new CatalogDependencyResolver($this->connection);
@@ -328,31 +357,62 @@ final readonly class MaterializedViewManager
 
         $this->logger->info('Materialized view refresh-all started.', ['total' => $total]);
 
-        $refreshed = 0;
+        $outcome = RefreshOutcome::of();
         foreach ($order as $qualifiedName) {
             try {
-                $this->refresh($registry->get($qualifiedName), $options);
+                $outcome = $outcome->merge($this->refresh($registry->get($qualifiedName), $options));
             } catch (Throwable $exception) {
                 $this->logger->error(
                     'Materialized view refresh-all aborted at "{view}".',
                     [
                         'view' => $qualifiedName,
-                        'refreshed' => $refreshed,
-                        'remaining' => $total - $refreshed - 1,
+                        'refreshed' => \count($outcome->refreshed),
+                        'remaining' => $total - \count($outcome->refreshed) - $outcome->skippedCount() - 1,
                         'total' => $total,
                     ],
                 );
 
                 throw $exception;
             }
-
-            ++$refreshed;
         }
 
         $this->logger->info('Materialized view refresh-all completed.', [
-            'refreshed' => $refreshed,
+            'refreshed' => \count($outcome->refreshed),
+            'skipped' => $outcome->skippedCount(),
             'total' => $total,
         ]);
+
+        return $outcome;
+    }
+
+    private function assertOnlyUnpopulatedSupported(RefreshOptions $options): void
+    {
+        if ($options->onlyUnpopulated && $options->concurrently) {
+            throw ConcurrentRefreshUnsupported::withOnlyUnpopulated();
+        }
+    }
+
+    private function skipUnlessUnpopulated(MaterializedViewName $name): ?RefreshOutcome
+    {
+        $existing = $this->introspector->find($name);
+
+        if (null === $existing) {
+            $this->logger->info('Skipped materialized view "{view}": it does not exist.', [
+                'view' => $name->qualifiedName(),
+            ]);
+
+            return RefreshOutcome::of(skippedMissing: [$name->qualifiedName()]);
+        }
+
+        if ($existing->isPopulated) {
+            $this->logger->info('Skipped materialized view "{view}": it is already populated.', [
+                'view' => $name->qualifiedName(),
+            ]);
+
+            return RefreshOutcome::of(skippedPopulated: [$name->qualifiedName()]);
+        }
+
+        return null;
     }
 
     private function assertConcurrentlySupported(MaterializedViewDefinition $definition): void

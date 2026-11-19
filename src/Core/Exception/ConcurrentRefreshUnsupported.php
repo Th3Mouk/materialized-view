@@ -24,4 +24,9 @@ final class ConcurrentRefreshUnsupported extends RuntimeException implements Mat
             $name->qualifiedName(),
         ));
     }
+
+    public static function withOnlyUnpopulated(): self
+    {
+        return new self('CONCURRENTLY and "only unpopulated" cannot be combined: an unpopulated view cannot be refreshed concurrently.');
+    }
 }

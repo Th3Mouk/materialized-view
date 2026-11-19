@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **`RefreshOptions::withOnlyUnpopulated()`** — `MaterializedViewManager::refresh()` and
+  `refreshAll()` can refresh only the views that exist and are unpopulated
+  (`pg_class.relispopulated = false`), leaving populated views untouched and keeping the
+  dependency order. The check runs under the per-view refresh lock. It cannot be combined
+  with `CONCURRENTLY` (`ConcurrentRefreshUnsupported`). See
+  [Refresh runtime & locking](docs/guide/refresh-and-locking.md).
+- **`Core\Refresh\RefreshOutcome`** — lists the views `refresh()` / `refreshAll()` refreshed
+  and those they skipped because they were already populated or missing.
+
+### Changed
+- `MaterializedViewManager::refresh()` and `refreshAll()` now return a `RefreshOutcome`
+  instead of `void`; existing callers that ignore the result are unaffected.
+
 ## [1.4.0] - 2026-11-19
 
 ### Added

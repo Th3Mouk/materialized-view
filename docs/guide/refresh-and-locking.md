@@ -8,10 +8,11 @@
 2. **Force the primary connection** (`ensureConnectedToPrimary()`). On the Doctrine DBAL backend this switches a `PrimaryReadReplicaConnection` to the primary so DDL/refresh never hits a replica; on a bare PDO connection there is no read/write split and this is a no-op. See [Connection backends](connection-backends.md).
 3. Apply `lock_timeout` and `statement_timeout`.
 4. Take a **per-view advisory lock**: `pg_advisory_lock(lock_namespace, view_key)`.
-5. Validate `CONCURRENTLY` preconditions: view populated, a complete UNIQUE index (no predicate, no expression).
-6. Execute the `REFRESH` via `Connection::executeStatement()`.
-7. `ANALYZE` if configured.
-8. Record duration / status / error if the observability table is enabled.
+5. With `RefreshOptions::withOnlyUnpopulated()`, re-read the view state under the lock and skip the view unless it exists and is unpopulated.
+6. Validate `CONCURRENTLY` preconditions: view populated, a complete UNIQUE index (no predicate, no expression).
+7. Execute the `REFRESH` via `Connection::executeStatement()`.
+8. `ANALYZE` if configured.
+9. Record duration / status / error if the observability table is enabled.
 
 PostgreSQL already permits only one `REFRESH` per view at a time; the advisory lock adds *application-visible* behaviour: fail-fast, configurable timeout, clean logs and metrics.
 
@@ -23,6 +24,25 @@ PostgreSQL already permits only one `REFRESH` per view at a time; the advisory l
 - there is **at least one UNIQUE index** that uses only column names and covers **all rows** — i.e. **not** an expression index and **not** partial (`WHERE`).
 
 If the preconditions are not met, the command must explicitly refuse or downgrade (per the chosen option). `WITH DATA` is the default of `REFRESH` and is omitted on concurrent refreshes.
+
+## Refreshing only unpopulated views
+
+Views declared `WITH NO DATA` and populated manually stay empty after a deploy rebuilds them. `RefreshOptions::default()->withOnlyUnpopulated()` makes `refresh()` and `refreshAll()` touch only the views whose `pg_class.relispopulated` is `false`, so a run right after a deployment is nearly free when nothing was rebuilt.
+
+```php
+$outcome = $manager->refreshAll($registry, RefreshOptions::default()->withOnlyUnpopulated());
+
+$outcome->refreshed;         // list<string> — populated by this run, in dependency order
+$outcome->skippedPopulated;  // list<string> — already populated, left untouched
+$outcome->skippedMissing;    // list<string> — declared but not created yet
+```
+
+- `refreshAll()` keeps the catalog dependency order and applies the check to each view in turn, under that view's advisory lock, so a view populated by a concurrent run is not refreshed twice.
+- A declared view that does not exist is skipped instead of failing; without the option a missing view still raises the database error.
+- Each skipped view is logged at `info`.
+- The option cannot be combined with `CONCURRENTLY`: PostgreSQL rejects a concurrent refresh of an unpopulated view, so the combination throws `ConcurrentRefreshUnsupported` before anything runs.
+
+`refresh()` and `refreshAll()` return a `RefreshOutcome`; without the option it lists every refreshed view and no skipped one.
 
 ## Advisory lock keys — stable, computed in PHP
 
